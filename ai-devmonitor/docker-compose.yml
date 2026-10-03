@@ -1,0 +1,37 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: devmonitor
+      POSTGRES_PASSWORD: devmonitor
+      POSTGRES_DB: devmonitor
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U devmonitor"]
+      interval: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    env_file: [.env.example]
+    environment:
+      DATABASE_URL: postgresql+psycopg://devmonitor:devmonitor@db:5432/devmonitor
+    depends_on:
+      db: {condition: service_healthy}
+    ports: ["8000:8000"]
+
+  frontend:
+    build: ./frontend
+    depends_on: [backend]
+    ports: ["8080:80"]
+
+  demo-agent:
+    image: python:3.11-slim
+    working_dir: /agent
+    volumes: ["./agent-demo:/agent:ro"]
+    command: ["python", "agent.py", "--url", "http://backend:8000", "--scenario", "loop"]
+    depends_on: [backend]
+    profiles: ["demo"]
+
+volumes:
+  pgdata:
