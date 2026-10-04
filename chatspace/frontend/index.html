@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ChatSpace</title>
+<style>
+:root{--bg:#fff;--fg:#1d1c1d;--side:#3f0e40;--sidefg:#e8d9e8;--line:#ddd;--acc:#611f69}
+@media(prefers-color-scheme:dark){:root{--bg:#1a1d21;--fg:#d1d2d3;--line:#383b40}}
+*{box-sizing:border-box}body{margin:0;font:15px system-ui,sans-serif;background:var(--bg);color:var(--fg);height:100vh;display:flex}
+#login{margin:auto;display:flex;flex-direction:column;gap:8px;width:280px}
+input,button,select{padding:8px;font:inherit;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg)}
+button{cursor:pointer;background:var(--acc);color:#fff;border:0}
+#app{display:none;width:100%}aside{width:230px;background:var(--side);color:var(--sidefg);padding:12px;overflow:auto}
+aside h4{margin:14px 0 4px;font-size:12px;text-transform:uppercase;opacity:.7}
+aside div{padding:3px 6px;border-radius:4px;cursor:pointer}aside div.on{background:#1264a3;color:#fff}
+main{flex:1;display:flex;flex-direction:column;min-width:0}header{padding:12px 16px;border-bottom:1px solid var(--line);font-weight:700}
+#msgs{flex:1;overflow:auto;padding:12px 16px}.m{margin-bottom:10px}.m b{margin-right:6px}.m small{opacity:.6}.m .del{opacity:.5;font-style:italic}
+#typing{height:20px;padding:0 16px;font-size:13px;opacity:.7}form{display:flex;gap:8px;padding:12px 16px}form input{flex:1}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;background:#888}.dot.ONLINE{background:#2eb67d}.dot.AWAY{background:#ecb22e}
+@media(max-width:600px){aside{width:140px}}
+</style></head><body>
+<form id="login" onsubmit="return false">
+  <h2>ChatSpace</h2>
+  <input id="u" placeholder="username (register only)"><input id="e" placeholder="email"><input id="p" type="password" placeholder="password (min 8)">
+  <button id="bl">Log in</button><button id="br" style="background:#555">Register</button><div id="err" style="color:#c00"></div>
+</form>
+<div id="app">
+  <aside><b id="me"></b><h4>Workspaces</h4><div id="wss"></div><button id="nw" style="width:100%;margin-top:6px">+ workspace</button>
+    <h4>Channels</h4><div id="chs"></div><h4>Members</h4><div id="mem"></div></aside>
+  <main><header id="title">Select a channel</header><div id="msgs"></div><div id="typing"></div>
+    <form id="send"><input id="txt" placeholder="Write a message…" autocomplete="off"><button>Send</button></form></main>
+</div>
+<script>
+const $=id=>document.getElementById(id);let tok,me,ws,sock,ch,typingTimer,names={},typers={};
+const api=async(m,u,b)=>{const r=await fetch('/api'+u,{method:m,headers:{'Content-Type':'application/json',...(tok&&{Authorization:'Bearer '+tok})},body:b&&JSON.stringify(b)});
+  if(!r.ok)throw new Error((await r.json().catch(()=>({}))).detail||r.status);return r.status===204?null:r.json()};
+const esc=s=>s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+async function auth(kind){try{const b={email:$('e').value,password:$('p').value};if(kind==='register')b.username=$('u').value;
+  const d=await api('POST','/auth/'+kind,b);tok=d.access_token;me=d.user;start()}catch(e){$('err').textContent=e.message}}
+$('bl').onclick=()=>auth('login');$('br').onclick=()=>auth('register');
+async function start(){$('login').style.display='none';$('app').style.display='flex';$('me').textContent=me.username;connect();loadWs()}
+function connect(){sock=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws?token='+tok);
+  sock.onmessage=e=>on(JSON.parse(e.data));sock.onclose=()=>tok&&setTimeout(()=>{connect();ch&&pick(ch)},2000)}
+setInterval(()=>sock?.readyState===1&&sock.send(JSON.stringify({type:'heartbeat'})),20000);
+function on(ev){
+  if(ev.type==='message.created'&&ev.message.channel_id===ch?.id&&!ev.message.reply_to){add(ev.message)}
+  else if(ev.type==='message.updated'||ev.type==='message.deleted'){ch&&loadMsgs()}
+  else if(ev.type==='typing.started'&&ev.user_id!==me.id){typers[ev.user_id]=setTimeout(()=>{delete typers[ev.user_id];typing()},5000);typing()}
+  else if(ev.type==='user.online'||ev.type==='user.offline'){ws&&loadMem()}
+  else if(ev.type==='notification.created'){document.title='🔔 '+ev.notification.text}}
+function typing(){const n=Object.keys(typers).map(i=>names[i]||'Someone');$('typing').textContent=n.length?n.join(', ')+' is typing…':''}
+async function loadWs(){const l=await api('GET','/workspaces');$('wss').innerHTML='';l.forEach(w=>{const d=document.createElement('div');d.textContent=w.name;d.onclick=()=>openWs(w);$('wss').append(d)});l[0]&&openWs(l[0])}
+$('nw').onclick=async()=>{const n=prompt('Workspace name');if(n){await api('POST','/workspaces',{name:n});loadWs()}};
+async function openWs(w){ws=w;const l=await api('GET',`/workspaces/${w.id}/channels`);$('chs').innerHTML='';l.forEach(c=>{const d=document.createElement('div');d.textContent=(c.type==='PRIVATE'?'🔒 ':'# ')+c.name;d.onclick=()=>pick(c);$('chs').append(d)});loadMem();l[0]&&pick(l[0])}
+async function loadMem(){const l=await api('GET',`/workspaces/${ws.id}/members`);l.forEach(m=>names[m.id]=m.username);$('mem').innerHTML=l.map(m=>`<div><span class="dot ${m.presence}"></span>${esc(m.username)}</div>`).join('')}
+async function pick(c){ch=c;$('title').textContent='# '+c.name;typers={};typing();const send=()=>sock.send(JSON.stringify({type:'subscribe',channel_id:c.id}));sock.readyState===1?send():sock.addEventListener('open',send,{once:true});await loadMsgs()}
+async function loadMsgs(){const d=await api('GET',`/channels/${ch.id}/messages?limit=50`);$('msgs').innerHTML='';d.messages.reverse().forEach(add)}
+function add(m){const d=document.createElement('div');d.className='m';const who=esc(names[m.author_id]||m.author_id.slice(0,6));
+  d.innerHTML=`<b>${who}</b><small>${new Date(m.created_at).toLocaleTimeString()}</small><div class="${m.deleted_at?'del':''}">${m.deleted_at?'message deleted':esc(m.content)}</div>`;$('msgs').append(d);$('msgs').scrollTop=1e9}
+$('send').onsubmit=async e=>{e.preventDefault();const v=$('txt').value.trim();if(!v||!ch)return;$('txt').value='';await api('POST',`/channels/${ch.id}/messages`,{content:v})};
+$('txt').oninput=()=>{if(sock?.readyState===1&&ch){sock.send(JSON.stringify({type:'typing.started',channel_id:ch.id}))}};
+</script></body></html>
