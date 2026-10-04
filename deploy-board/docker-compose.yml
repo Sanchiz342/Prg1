@@ -1,0 +1,16 @@
+# Mounts the host Docker socket so DeployBoard can build/run images and start runner containers.
+# Only use on a trusted machine.
+services:
+  deployboard:
+    build: ./backend
+    ports: ["8000:8000"]
+    environment:
+      DB_URL: sqlite:////data/deployboard.db
+      DB_WORKSPACE: /data/workspaces
+      DB_KEY_FILE: /data/.secret.key
+      DB_RUNNER: docker
+    volumes:
+      - data:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+volumes:
+  data:

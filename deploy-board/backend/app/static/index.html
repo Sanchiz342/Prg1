@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DeployBoard</title>
+<style>
+:root{--bg:#0f1115;--card:#171a21;--line:#262b36;--fg:#e6e8ee;--mut:#8b93a7;--ok:#3fb950;--bad:#f85149;--run:#d29922;--acc:#58a6ff}
+@media(prefers-color-scheme:light){:root{--bg:#f6f7f9;--card:#fff;--line:#dfe3ea;--fg:#1c2230;--mut:#667085;--acc:#0969da}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 system-ui,sans-serif}
+header{display:flex;justify-content:space-between;align-items:center;padding:14px 24px;border-bottom:1px solid var(--line)}
+h1{font-size:18px;margin:0}main{max-width:960px;margin:0 auto;padding:20px 16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:12px}
+.row{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.mut{color:var(--mut)}button{background:var(--acc);color:#fff;border:0;border-radius:6px;padding:6px 12px;cursor:pointer;font:inherit}
+button.sec{background:transparent;color:var(--fg);border:1px solid var(--line)}
+.badge{font-weight:600}.SUCCESS,.ok{color:var(--ok)}.FAILED{color:var(--bad)}.RUNNING{color:var(--run)}.QUEUED,.PENDING,.SKIPPED{color:var(--mut)}
+a{color:var(--acc);cursor:pointer;text-decoration:none}
+pre{background:#0b0d11;color:#d6dae3;border-radius:8px;padding:12px;max-height:380px;overflow:auto;margin:10px 0 0;font:12px/1.5 ui-monospace,monospace;white-space:pre-wrap}
+form{display:grid;gap:8px;grid-template-columns:1fr 1fr}form input{padding:6px 8px;border-radius:6px;border:1px solid var(--line);background:var(--bg);color:var(--fg);font:inherit}
+.stages div{padding:2px 0}
+</style></head><body>
+<header><h1>🚀 DeployBoard</h1><button id="newBtn">+ New project</button></header>
+<main id="app"></main>
+<script>
+const $=s=>document.querySelector(s), app=$("#app");
+const api=(p,o={})=>fetch("/api"+p,{headers:{"content-type":"application/json"},...o}).then(async r=>{if(!r.ok)throw new Error((await r.json().catch(()=>({}))).detail||r.statusText);return r.status==204?null:r.json()});
+const post=(p,b)=>api(p,{method:"POST",body:b?JSON.stringify(b):undefined});
+const esc=s=>String(s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+const icon={SUCCESS:"✓",FAILED:"✕",RUNNING:"●",QUEUED:"○",PENDING:"○",SKIPPED:"–"};
+const ago=t=>{if(!t)return"";const s=(Date.now()-new Date(t))/1000;return s<60?"just now":s<3600?Math.floor(s/60)+" min ago":s<86400?Math.floor(s/3600)+" h ago":Math.floor(s/86400)+" d ago"};
+let ws,timer;
+function stop(){clearInterval(timer);ws&&ws.close();ws=null}
+
+async function home(){stop();const ps=await api("/projects");
+ app.innerHTML=`<div id="form" class="card" hidden><form id="f">
+ <input name="name" placeholder="name" required><input name="repo_url" placeholder="repository URL or path" required>
+ <input name="branch" placeholder="branch (main)"><input name="environment" placeholder="environment (production)">
+ <input name="health_url" placeholder="health URL (optional)"><input name="port" type="number" placeholder="port (0 = no deploy)">
+ <button>Create</button></form></div>`+(ps.map(p=>{const d=p.last_deployment;return`<div class="card"><div class="row"><div><b>${esc(p.name)}</b> <span class="mut">${esc(p.environment)} · ${esc(p.branch)}</span></div>
+ <span class="badge ${d?d.status:"QUEUED"}">${d?icon[d.status]+" "+d.status:"No deployments"}</span></div>
+ ${d?`<div class="mut">Deployment #${d.id} · ${esc(d.commit.slice(0,7)||"—")} · ${ago(d.created_at)}</div>`:""}
+ <div class="row" style="margin-top:8px"><span><button data-deploy="${p.id}">Deploy</button> <button class="sec" data-open="${p.id}">History</button></span>
+ ${d&&d.status=="FAILED"?`<button class="sec" data-rb="${d.id}">Rollback</button>`:""}</div></div>`}).join("")||'<p class="mut">No projects yet.</p>');
+ $("#f").onsubmit=async e=>{e.preventDefault();const f=Object.fromEntries(new FormData(e.target));
+  for(const k in f)if(f[k]==="")delete f[k];if(f.port)f.port=+f.port;try{await post("/projects",f);home()}catch(x){alert(x.message)}};
+ timer=setInterval(()=>{if(!document.querySelector("#form:not([hidden])"))home()},5000)}
+document.addEventListener("click",async e=>{const t=e.target;
+ try{if(t.dataset.deploy){const d=await post(`/projects/${t.dataset.deploy}/deploy`);deployment(d.id)}
+ else if(t.dataset.open)project(+t.dataset.open);
+ else if(t.dataset.rb){const d=await post(`/deployments/${t.dataset.rb}/rollback`);deployment(d.id)}
+ else if(t.dataset.dep)deployment(+t.dataset.dep);
+ else if(t.dataset.home!==undefined)home()}catch(x){alert(x.message)}});
+$("#newBtn").onclick=()=>{const f=$("#form");f&&(f.hidden=!f.hidden)};
+
+async function project(id){stop();const [p,ds]=await Promise.all([api("/projects/"+id),api(`/projects/${id}/deployments`)]);
+ app.innerHTML=`<p><a data-home>← Projects</a></p><h2>${esc(p.name)} <span class="mut">${esc(p.environment)}</span></h2>
+ <div class="card mut">${esc(p.repo_url)} · branch ${esc(p.branch)}<br>Webhook: POST /api/webhooks/github · secret <code>${esc(p.webhook_secret)}</code></div>
+ <h3>Deployments</h3>`+ds.map(d=>`<div class="card row"><a data-dep="${d.id}">#${d.id}</a><span class="mut">${esc(d.commit.slice(0,7)||"—")} · ${esc(d.trigger)} · ${esc(d.author)}</span>
+ <span class="mut">${ago(d.created_at)}</span><span class="badge ${d.status}">${icon[d.status]} ${d.status}</span></div>`).join("")}
+
+async function deployment(id){stop();let d=await api("/deployments/"+id);
+ app.innerHTML=`<p><a data-open="${d.project_id}">← History</a></p><h2>Deployment #${d.id} <span id="st" class="badge"></span></h2>
+ <div class="card"><div class="mut" id="meta"></div><div class="stages" id="stages"></div></div><pre id="log"></pre>`;
+ const draw=()=>{$("#st").className="badge "+d.status;$("#st").textContent=icon[d.status]+" "+d.status;
+  $("#meta").textContent=`commit ${d.commit.slice(0,7)||"—"} · ${d.branch} · ${d.trigger}${d.image?" · image "+d.image:""}`+(d.error?" · "+d.error:"");
+  $("#stages").innerHTML=d.stages.map(s=>`<div class="${s.status}">${icon[s.status]} ${esc(s.name)}${s.exit_code?` <span class="mut">(exit ${s.exit_code})</span>`:""}</div>`).join("")+
+   (d.status=="FAILED"?`<p><button class="sec" data-rb="${d.id}">Rollback</button></p>`:"")};
+ draw();const log=$("#log");
+ ws=new WebSocket((location.protocol=="https:"?"wss://":"ws://")+location.host+"/ws/deployments/"+id);
+ ws.onmessage=async m=>{const ev=JSON.parse(m.data);
+  if(ev.type=="log"){log.textContent+=ev.line+"\n";log.scrollTop=log.scrollHeight}
+  else{d=await api("/deployments/"+id);draw()}};}
+home();
+</script></body></html>
