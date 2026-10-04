@@ -20,10 +20,12 @@ def test_password_hashing_unit():
 
 
 def test_register_only_first_user_then_closed(client):
+    assert client.get("/api/auth/status").json() == {"registration_open": True}
     assert client.post("/api/auth/register", json={"username": "admin", "password": "short"}).status_code == 422
     r = client.post("/api/auth/register", json={"username": "admin", "password": "correct horse"})
     assert r.status_code == 201 and r.json()["user"]["role"] == "admin"
     assert client.post("/api/auth/register", json={"username": "eve", "password": "correct horse"}).status_code == 403
+    assert client.get("/api/auth/status").json() == {"registration_open": False}
 
 
 def test_passwords_and_tokens_not_stored_in_clear(client, admin):

@@ -11,6 +11,12 @@ from .deps import bearer_token, current_user, get_session
 router = APIRouter(prefix="/api", tags=["auth"])
 
 
+@router.get("/auth/status")
+def auth_status(s: Session = Depends(get_session)):
+    """Public: lets the UI decide between 'create the first admin' and 'log in'."""
+    return {"registration_open": repo.count_users(s) == 0}
+
+
 @router.post("/auth/register", response_model=schemas.TokenOut, status_code=201)
 def register(body: schemas.Credentials, s: Session = Depends(get_session)):
     """Only works while no account exists; the first account is the admin."""

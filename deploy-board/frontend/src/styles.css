@@ -1,0 +1,45 @@
+:root {
+  --bg: #0f1115; --card: #171a21; --line: #262b36; --fg: #e6e8ee; --muted: #8b93a7;
+  --ok: #3fb950; --bad: #f85149; --run: #d29922; --accent: #58a6ff; --code: #0b0d11;
+}
+@media (prefers-color-scheme: light) {
+  :root { --bg: #f6f7f9; --card: #fff; --line: #dfe3ea; --fg: #1c2230; --muted: #667085; --accent: #0969da; --code: #f0f2f5; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.5 system-ui, sans-serif; }
+main { max-width: 1000px; margin: 0 auto; padding: 8px 16px 48px; }
+h1 { font-size: 22px; } h2 { font-size: 17px; margin-top: 28px; } h3 { margin: 0 0 6px; font-size: 16px; }
+a { color: var(--accent); text-decoration: none; } a:hover { text-decoration: underline; }
+code { background: var(--code); padding: 1px 5px; border-radius: 4px; font-size: 12.5px; word-break: break-all; }
+.muted { color: var(--muted); } .empty { padding: 12px 0; }
+.topbar { display: flex; gap: 16px; align-items: center; padding: 10px 24px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.topbar nav { display: flex; gap: 14px; } .topbar nav a.active { font-weight: 600; text-decoration: underline; }
+.brand { font-weight: 700; font-size: 16px; color: var(--fg); } .spacer { flex: 1; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin: 10px 0; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; } .grid .card { margin: 0; }
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; } .between { justify-content: space-between; }
+button, .button { background: var(--accent); color: #fff; border: 0; border-radius: 6px; padding: 7px 14px; cursor: pointer; font: inherit; display: inline-block; }
+button:hover:not(:disabled), .button:hover { filter: brightness(1.1); text-decoration: none; }
+button:disabled { opacity: .55; cursor: default; }
+button.secondary { background: transparent; color: var(--fg); border: 1px solid var(--line); }
+button.danger { color: var(--bad); } button.link { background: none; color: var(--accent); padding: 0 6px; }
+input, select { padding: 7px 9px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); font: inherit; }
+form { display: grid; gap: 10px; } form.row { display: flex; } label { display: grid; gap: 4px; } label.inline { display: inline-flex; gap: 6px; align-items: center; }
+fieldset { border: 1px solid var(--line); border-radius: 8px; display: grid; gap: 8px; }
+.login { max-width: 340px; margin: 12vh auto; padding: 0 16px; }
+.badge { font-weight: 600; font-size: 12.5px; white-space: nowrap; }
+.badge.success { color: var(--ok); } .badge.failed { color: var(--bad); } .badge.running { color: var(--run); }
+.badge.queued, .badge.pending, .badge.skipped, .badge.muted { color: var(--muted); }
+.error { background: color-mix(in srgb, var(--bad) 14%, transparent); border: 1px solid var(--bad); border-radius: 8px; padding: 8px 12px; margin: 8px 0; }
+.envlist, .plain, .stages { list-style: none; padding: 0; margin: 0; }
+.envlist li { display: flex; gap: 10px; align-items: center; padding: 3px 0; flex-wrap: wrap; }
+.stage { display: flex; gap: 12px; align-items: center; padding: 5px 0; border-bottom: 1px solid var(--line); } .stage:last-child { border: 0; }
+.stage .badge { width: 90px; }
+.table { width: 100%; border-collapse: collapse; } .table th { text-align: left; color: var(--muted); font-weight: 500; }
+.table td, .table th { padding: 6px 8px; border-bottom: 1px solid var(--line); }
+.facts { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; margin: 0; } .facts dt { color: var(--muted); } .facts dd { margin: 0; }
+.tabs { display: flex; gap: 6px; margin: 12px 0; flex-wrap: wrap; }
+.tab { background: var(--card); color: var(--fg); border: 1px solid var(--line); } .tab.active { border-color: var(--accent); }
+.logs { background: #0b0d11; color: #d6dae3; border-radius: 8px; padding: 12px; height: 380px; overflow: auto; margin: 6px 0; font: 12px/1.5 ui-monospace, monospace; white-space: pre-wrap; }
+.stream.live { color: var(--ok); } .stream.error { color: var(--bad); }
+.webhook { margin-top: 28px; }
