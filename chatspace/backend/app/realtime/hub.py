@@ -19,6 +19,8 @@ class Hub:
     def __init__(self, redis):
         self.redis = redis
         self.rooms: dict[str, set[WebSocket]] = {}
+        self.sockets_by_user: dict[str, set[WebSocket]] = {}
+        self._owner: dict[WebSocket, str] = {}
         self._pubsub = None
         self._task: asyncio.Task | None = None
 
@@ -37,10 +39,28 @@ class Hub:
         if self._pubsub:
             await self._pubsub.aclose()
 
+    def register(self, user_id: str, ws: WebSocket) -> None:
+        self.sockets_by_user.setdefault(user_id, set()).add(ws)
+        self._owner[ws] = user_id
+
     def join(self, room: str, ws: WebSocket) -> None:
         self.rooms.setdefault(room, set()).add(ws)
 
+    def leave(self, room: str, ws: WebSocket) -> None:
+        self.rooms.get(room, set()).discard(ws)
+        if room in self.rooms and not self.rooms[room]:
+            del self.rooms[room]
+
+    async def control(self, op: str, user_id: str, rooms: list[str]) -> None:
+        """Membership changed over REST: make the user's *live sockets on every instance* join/leave rooms."""
+        await self.redis.publish(BUS, json.dumps({"op": op, "user_id": user_id, "rooms": rooms}))
+
     def leave_all(self, ws: WebSocket) -> None:
+        user_id = self._owner.pop(ws, None)
+        if user_id:
+            self.sockets_by_user.get(user_id, set()).discard(ws)
+            if not self.sockets_by_user.get(user_id):
+                self.sockets_by_user.pop(user_id, None)
         for room in [r for r, s in self.rooms.items() if ws in s]:
             self.rooms[room].discard(ws)
             if not self.rooms[room]:
@@ -61,7 +81,12 @@ class Hub:
                     await asyncio.sleep(0.01)
                     continue
                 data = json.loads(msg["data"])
-                await self._deliver(data["room"], data["event"])
+                if "op" in data:
+                    for ws in list(self.sockets_by_user.get(data["user_id"], ())):
+                        for room in data["rooms"]:
+                            (self.join if data["op"] == "join" else self.leave)(room, ws)
+                else:
+                    await self._deliver(data["room"], data["event"])
             except asyncio.CancelledError:
                 raise
             except Exception:  # keep the bus alive on bad frames / transient redis errors

@@ -131,7 +131,7 @@ WORD = re.compile(r"\w+")
 
 
 def _prefix_tsquery(q: str) -> str | None:
-    """'data conn' -> "'data':* & 'conn':*". Only \w tokens survive, so no tsquery syntax can be injected."""
+    r"""'data conn' -> "'data':* & 'conn':*". Only \w tokens survive, so no tsquery syntax can be injected."""
     words = WORD.findall(q)[:10]
     return " & ".join(f"'{w}':*" for w in words) if words else None
 

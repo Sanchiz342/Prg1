@@ -25,9 +25,9 @@ def connect(client, who):
 
 
 def test_rejects_bad_token(client):
-    with pytest.raises(WebSocketDisconnect) as e:
-        with client.websocket_connect("/ws?token=bad"):
-            pass
+    with client.websocket_connect("/ws?token=bad") as ws:
+        with pytest.raises(WebSocketDisconnect) as e:
+            ws.receive_json()          # the only thing a client can ever get is the 4401 close
     assert e.value.code == 4401
 
 
@@ -147,3 +147,79 @@ async def test_presence_ttl_expires():
     assert await p.get_many(["u1", "u2"]) == {"u1": "AWAY", "u2": "OFFLINE"}
     await asyncio.sleep(1.2)  # no heartbeat -> expires
     assert await p.get_many(["u1"]) == {"u1": "OFFLINE"}
+
+
+# ---- sockets must follow membership changes made over REST (found by the two-instance Compose run)
+
+def test_socket_opened_before_joining_a_workspace_receives_its_events(api, client):
+    alice, dave = api.user("alice"), api.user("dave")
+    ws_d, sock = connect(client, dave)            # dave has no workspace yet when he connects
+    try:
+        wid = api.call("POST", "/workspaces", alice, json={"name": "PRG1"}).json()["id"]
+        api.call("POST", f"/workspaces/{wid}/members", alice, json={"email": "dave@x.io"})
+        api.call("POST", f"/workspaces/{wid}/channels", alice, json={"name": "dev"})
+        assert recv_until(sock, "channel.created")["channel"]["name"] == "dev"
+    finally:
+        ws_d.__exit__(None, None, None)
+
+
+def test_creators_open_socket_receives_events_of_the_workspace_it_creates(api, client):
+    alice, bob = api.user("alice"), api.user("bob")
+    ws_a, sock = connect(client, alice)
+    try:
+        wid = api.call("POST", "/workspaces", alice, json={"name": "PRG1"}).json()["id"]
+        api.call("POST", f"/workspaces/{wid}/members", alice, json={"email": "bob@x.io"})
+        ws_b, _ = connect(client, bob)
+        try:
+            assert recv_until(sock, "user.online")["user_id"] == bob["id"]
+        finally:
+            ws_b.__exit__(None, None, None)
+    finally:
+        ws_a.__exit__(None, None, None)
+
+
+def test_removed_member_loses_live_access(api, team, client):
+    t, gid = team, team["general"]["id"]
+    ws_c, carol = connect(client, t["carol"])
+    ws_b, bob = connect(client, t["bob"])
+    try:
+        for s in (carol, bob):
+            s.send_json({"type": "subscribe", "channel_id": gid})
+            recv_until(s, "subscribed")
+        hub = client.app.state.hub
+        assert len(hub.rooms[f"channel:{gid}"]) == 2
+        assert api.call("DELETE", f"/workspaces/{t['ws']['id']}/members/{t['carol']['id']}", t["alice"]).status_code == 204
+        for _ in range(100):
+            if len(hub.rooms.get(f"channel:{gid}", ())) == 1:
+                break
+            time.sleep(0.02)
+        assert len(hub.rooms[f"channel:{gid}"]) == 1             # only bob is still listening
+        api.call("POST", f"/channels/{gid}/messages", t["alice"], json={"content": "after removal"})
+        assert recv_until(bob, "message.created")["message"]["content"] == "after removal"
+        assert f"workspace:{t['ws']['id']}" in hub.rooms and len(hub.rooms[f"workspace:{t['ws']['id']}"]) >= 1
+    finally:
+        ws_c.__exit__(None, None, None)
+        ws_b.__exit__(None, None, None)
+
+
+async def test_membership_change_reaches_sockets_on_other_instances():
+    server = FakeServer()
+    h1, h2 = Hub(FakeAsyncRedis(server=server)), Hub(FakeAsyncRedis(server=server))
+    await h1.start(); await h2.start()
+    try:
+        sock = FakeSocket()
+        h1.register("u1", sock)                                  # u1 is connected to instance 1
+        await h2.control("join", "u1", ["workspace:w1"])         # the REST call landed on instance 2
+        for _ in range(100):
+            if h1.in_room("workspace:w1", sock):
+                break
+            await asyncio.sleep(0.02)
+        assert h1.in_room("workspace:w1", sock)
+        await h2.control("leave", "u1", ["workspace:w1"])
+        for _ in range(100):
+            if not h1.in_room("workspace:w1", sock):
+                break
+            await asyncio.sleep(0.02)
+        assert not h1.in_room("workspace:w1", sock)
+    finally:
+        await h1.stop(); await h2.stop()

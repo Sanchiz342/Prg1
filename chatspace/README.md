@@ -7,7 +7,7 @@ WebSockets, Redis Pub/Sub, RBAC and testing. Fully independent of the other mini
 
 **Production-like (PostgreSQL + Redis):** `docker compose up --build` starts postgres, redis, a one-shot
 `migrate` service (`python -m app.migrate`) and two API instances (:8000, :8001) that wait for it.
-*(The compose file has not been exercised end to end yet — that is the next planned step.)*
+See *Verified with Docker Compose* below for exactly what was exercised.
 
 **PostgreSQL is the primary database.** Full-text search, the GIN index and concurrent-safe migrations are
 PostgreSQL features, and the database must be **UTF8** (migration `0002` refuses to run otherwise, because with
@@ -58,6 +58,31 @@ npm test           # vitest
 npm run build      # -> frontend/dist, served by the backend at /
 ```
 
+## Verified with Docker Compose
+
+`docker compose up --build` on clean volumes, two API instances (:8000 → alice, :8001 → bob), checked with
+`e2e/compose_e2e.mjs` (Playwright, real Chromium) and `e2e/two_instances.py` (raw HTTP + WebSocket per instance):
+
+- `migrate` exits 0 and finishes *before* the API containers start; the API containers log no migration activity,
+  and an API container started against an empty database refuses to start and creates no tables.
+- PostgreSQL database is UTF8; `alembic_version` = `0002`; GIN index present; Redis answers and both instances subscribe to the bus.
+- Frontend is served by both instances; each instance holds its own WebSocket and Redis publishes from both.
+- Browser flow across instances: register/login, workspace, public + private channels (private hidden from non-members),
+  messages both directions, typing, presence, reactions, replies, edit, delete, mention/reply notifications,
+  offline → reconnect catch-up, full-text search with private-channel isolation.
+- `docker compose down` then `up` with the same volume: users, messages, migration state kept, `migrate` is a no-op,
+  login works on the other instance, search still works.
+
+Bugs this run found (fixed, with regression tests): a socket opened before a user joined a workspace never received
+that workspace's events and a removed member kept receiving channel events (hub now applies membership changes
+across instances); a rejected WebSocket token surfaced as a bare 403 that browsers can't distinguish from a network
+error (now accepted-then-closed with code 4401 so the client logs out instead of retrying forever); a `SyntaxWarning`
+under Python 3.12.
+
+Not covered: TLS/reverse proxy, multi-node Redis, load, and Redis persistence (presence/typing are ephemeral by design).
+Run it yourself: `docker compose up --build -d`, then `cd e2e && npm i && CHROME=/path/to/chromium npm run flow`
+(use a fresh volume: the flow registers `alice`/`bob`).
+
 ## Frontend (React + TypeScript + Vite)
 
 TanStack Query holds server state; the WebSocket only patches that cache (`src/realtime.tsx`, pure helpers in `src/cache.ts`).
@@ -90,7 +115,7 @@ Server → client: `ready`, `subscribed`, `error`, `message.created|updated|dele
 
 ## Status / not done yet
 
-Done: stages 1–5 core (auth, RBAC, messaging, real-time, Redis distribution, metrics, tests; Dockerfile and compose written but not yet run).
-Not yet: verified Docker Compose run, unread counters, DMs, attachments (MinIO),
+Done: stages 1–5 core (auth, RBAC, messaging, real-time, Redis distribution, metrics, tests, Docker Compose stack verified end to end).
+Not yet: unread counters, DMs, attachments (MinIO),
 AI assistant, CI workflow. The frontend has no browser E2E suite in the repo yet (the flow was verified manually with Playwright against a real backend). Presence on multi-instance deployments is per-user TTL: closing one of several instances' sockets
 for the same user clears presence until the next heartbeat.

@@ -20,11 +20,16 @@ async def websocket_endpoint(ws: WebSocket, token: str = ""):
         user_id = decode_token(token, st.settings.jwt_secret)
         user = await s.get(User, user_id) if user_id else None
         if user is None:
-            await ws.close(code=4401)  # unauthenticated: reject before accepting any subscription
+            # Accept, then close with an application code: a close *before* accept becomes a bare HTTP 403
+            # that browsers report as a generic failure (code 1006), so the client could not tell
+            # "token expired -> log out" from "network down -> retry". Nothing is subscribed or sent.
+            await ws.accept()
+            await ws.close(code=4401)
             return
         workspace_ids = list(await s.scalars(select(WorkspaceMember.workspace_id).where(WorkspaceMember.user_id == user.id)))
     await ws.accept()
     hub, presence = st.hub, st.presence
+    hub.register(user.id, ws)
     hub.join(events.user_room(user.id), ws)
     for wid in workspace_ids:
         hub.join(events.workspace_room(wid), ws)

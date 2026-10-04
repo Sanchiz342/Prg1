@@ -1,0 +1,10 @@
+{
+  "name": "chatspace-e2e",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "flow": "node compose_e2e.mjs flow",
+    "after-restart": "node compose_e2e.mjs after-restart"
+  },
+  "dependencies": { "playwright-core": "^1.50.0" }
+}
