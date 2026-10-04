@@ -97,7 +97,8 @@ def test_threads_and_reactions(api, team):
         assert api.call("PUT", f"/messages/{parent['id']}/reactions/👍", u).status_code == 204
     api.call("PUT", f"/messages/{parent['id']}/reactions/👍", t["bob"])  # idempotent
     top = api.call("GET", f"/channels/{gid}/messages", t["alice"]).json()["messages"]
-    assert top[0]["reactions"] == {"👍": 2}
+    assert top[0]["reactions"] == {"👍": 2} and top[0]["mine"] == ["👍"]
+    assert api.call("GET", f"/channels/{gid}/messages", t["carol"]).json()["messages"][0]["mine"] == []
     api.call("DELETE", f"/messages/{parent['id']}/reactions/👍", t["bob"])
     top = api.call("GET", f"/channels/{gid}/messages", t["alice"]).json()["messages"]
     assert top[0]["reactions"] == {"👍": 1}

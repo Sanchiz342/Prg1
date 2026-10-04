@@ -12,11 +12,12 @@ def iso(dt: datetime | None) -> str | None:
     return dt.isoformat() + "Z" if dt else None
 
 
-async def serialize(s: AsyncSession, messages: list[Message]) -> list[dict]:
+async def serialize(s: AsyncSession, messages: list[Message], viewer_id: str | None = None) -> list[dict]:
     """Batch-serialize (3 queries total) to avoid N+1 on a 50-message page."""
     ids = [m.id for m in messages]
     reactions: dict[str, dict[str, int]] = defaultdict(dict)
     replies: dict[str, int] = {}
+    mine: dict[str, list[str]] = defaultdict(list)
     if ids:
         rows = await s.execute(
             select(Reaction.message_id, Reaction.reaction, func.count())
@@ -31,7 +32,13 @@ async def serialize(s: AsyncSession, messages: list[Message]) -> list[dict]:
             .group_by(Message.reply_to)
         )
         replies = {mid: n for mid, n in rows}
-    return [
+        if viewer_id:
+            rows = await s.execute(
+                select(Reaction.message_id, Reaction.reaction).where(Reaction.message_id.in_(ids), Reaction.user_id == viewer_id)
+            )
+            for mid, emoji in rows:
+                mine[mid].append(emoji)
+    out = [
         {
             "id": m.id,
             "channel_id": m.channel_id,
@@ -46,6 +53,10 @@ async def serialize(s: AsyncSession, messages: list[Message]) -> list[dict]:
         }
         for m in messages
     ]
+    if viewer_id:  # per-viewer data: only on REST responses, never in broadcasts
+        for d in out:
+            d["mine"] = mine.get(d["id"], [])
+    return out
 
 
 MENTION = re.compile(r"(?<!\w)@([A-Za-z0-9_]{3,32})")

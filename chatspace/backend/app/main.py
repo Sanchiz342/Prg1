@@ -81,7 +81,7 @@ def create_app(settings: Settings | None = None, redis=None) -> FastAPI:
     async def prometheus():
         return metrics.render()
 
-    static = Path(__file__).resolve().parents[2] / "frontend"
+    static = Path(__file__).resolve().parents[2] / "frontend" / "dist"
     if static.is_dir():
         app.mount("/", StaticFiles(directory=static, html=True), name="frontend")
     return app

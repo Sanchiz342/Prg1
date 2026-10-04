@@ -68,14 +68,14 @@ async def list_messages(channel_id: str, limit: int = 50, before: str | None = N
     rows = list(await s.scalars(q.order_by(Message.created_at.desc(), Message.id.desc()).limit(limit + 1)))
     has_more = len(rows) > limit
     rows = rows[:limit]
-    return {"messages": await serialize(s, rows), "has_more": has_more, "next_before": rows[-1].id if has_more else None}
+    return {"messages": await serialize(s, rows, user.id), "has_more": has_more, "next_before": rows[-1].id if has_more else None}
 
 
 @router.get("/messages/{message_id}/replies")
 async def replies(message_id: str, user: User = Depends(current_user), s: AsyncSession = Depends(get_session)):
     m, _ = await _load(s, message_id, user)
     rows = await s.scalars(select(Message).where(Message.reply_to == m.id).order_by(Message.created_at, Message.id))
-    return await serialize(s, list(rows))
+    return await serialize(s, list(rows), user.id)
 
 
 @router.patch("/messages/{message_id}")
@@ -89,7 +89,7 @@ async def edit_message(message_id: str, body: MessageIn, request: Request, user:
     await s.commit()
     data = (await serialize(s, [m]))[0]
     await request.app.state.hub.publish(events.channel_room(m.channel_id), {"type": events.MESSAGE_UPDATED, "message": data})
-    return data
+    return {**data, "mine": (await serialize(s, [m], user.id))[0]["mine"]}
 
 
 @router.delete("/messages/{message_id}", status_code=204)
@@ -141,4 +141,4 @@ async def search_messages(s: AsyncSession, workspace_id: str, user_id: str, q: s
         .order_by(Message.created_at.desc(), Message.id.desc())
         .limit(limit)
     ))
-    return await serialize(s, rows)
+    return await serialize(s, rows, user_id)
