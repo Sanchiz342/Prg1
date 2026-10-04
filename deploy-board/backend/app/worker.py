@@ -1,54 +1,109 @@
-"""Job queue + worker threads. The Queue interface is deliberately tiny so a Redis-backed
-implementation can replace it without touching the API or the pipeline engine."""
+"""Worker pool: pulls deployment ids from the queue, claims them atomically in the database and runs the
+pipeline. A reaper thread re-queues jobs whose worker stopped heartbeating (crash / restart)."""
 import logging
-import queue
 import threading
 
 from . import db
+from .config import settings
+from .db import models as m
+from .db import repositories as repo
+from .jobs import JobQueue
 from .pipeline.engine import Execution
+from .services import deployments
 
 log = logging.getLogger("deployboard.worker")
+BUSY_RETRY_SECONDS = 1.0
 
 
 class WorkerPool:
-    def __init__(self, size: int = 2, runner_factory=None):
-        self.q: queue.Queue[int | None] = queue.Queue()
-        self.size = size
+    def __init__(self, queue: JobQueue, size: int | None = None, runner_factory=None) -> None:
+        self.queue = queue
+        self.size = settings.workers if size is None else size
         self.runner_factory = runner_factory
-        self.threads: list[threading.Thread] = []
+        self._stop = threading.Event()
+        self._threads: list[threading.Thread] = []
+        self._timers: set[threading.Timer] = set()
 
     def start(self) -> None:
+        self._stop.clear()
+        with db.new_session() as s:
+            recovered = deployments.recover(s, self.queue)
+        if recovered:
+            log.info("recovered deployments: %s", recovered)
         for i in range(self.size):
-            t = threading.Thread(target=self._loop, name=f"worker-{i + 1}", daemon=True)
-            t.start()
-            self.threads.append(t)
+            self._spawn(self._loop, f"worker-{i + 1}")
+        self._spawn(self._reap, "reaper")
 
-    def stop(self) -> None:
-        for _ in self.threads:
-            self.q.put(None)
-        for t in self.threads:
-            t.join(timeout=5)
-        self.threads.clear()
+    def _spawn(self, target, name: str) -> None:
+        t = threading.Thread(target=target, name=name, daemon=True)
+        t.start()
+        self._threads.append(t)
 
-    def enqueue(self, deployment_id: int) -> None:
-        self.q.put(deployment_id)
+    def stop(self, timeout: float = 10.0) -> None:
+        """Stop taking new jobs; wait up to `timeout` for running ones. A job still running afterwards is
+        recovered through its expired lease after the next start."""
+        self._stop.set()
+        for t in list(self._timers):
+            t.cancel()
+        for t in self._threads:
+            t.join(timeout=timeout)
+        self._threads.clear()
 
-    def recover(self) -> None:
-        """Re-queue deployments that were interrupted by a restart."""
-        with db.SessionLocal() as s:
-            for d in s.query(db.Deployment).filter(db.Deployment.status.in_(["QUEUED", "RUNNING"])):
-                d.status = "QUEUED"
-                for st in d.stages:
-                    st.status, st.exit_code, st.started_at, st.finished_at = "PENDING", None, None, None
-                self.enqueue(d.id)
-            s.commit()
-
+    # ---- loops ----
     def _loop(self) -> None:
-        while (dep_id := self.q.get()) is not None:
+        while not self._stop.is_set():
             try:
-                runner = self.runner_factory() if self.runner_factory else None
-                Execution(dep_id, runner).run()
+                job = self.queue.reserve(timeout=1)
             except Exception:
-                log.exception("deployment %s crashed", dep_id)
-            finally:
-                self.q.task_done()
+                log.exception("queue error; retrying")
+                self._stop.wait(2)
+                continue
+            if job is not None:
+                self.process(job)
+
+    def _reap(self) -> None:
+        while not self._stop.wait(settings.reaper_interval):
+            try:
+                with db.new_session() as s:
+                    deployments.requeue_expired(s, self.queue)
+            except Exception:
+                log.exception("reaper failed")
+
+    # ---- one job ----
+    def process(self, deployment_id: int) -> str:
+        """Run one job. Returns 'skipped' (already claimed / gone), 'busy' (environment in use, re-queued) or the final status."""
+        with db.new_session() as s:
+            d = repo.get_deployment(s, deployment_id)
+            if d is None or d.status != "QUEUED":
+                return "skipped"
+            at = m.now()
+            if not repo.claim_deployment(s, deployment_id, repo.lease_for(settings.lease_seconds, at), at):
+                s.refresh(d)  # the compare-and-set bypassed the identity map
+                if d.status == "QUEUED":  # nobody claimed it, so the environment must be busy
+                    self._requeue_later(deployment_id)
+                    return "busy"
+                return "skipped"
+        try:
+            runner = self.runner_factory() if self.runner_factory else None
+            return Execution(deployment_id, runner).run()
+        except Exception as e:  # engine bug or setup failure: never leave the job RUNNING
+            log.exception("deployment %s crashed", deployment_id)
+            with db.new_session() as s:
+                d = repo.get_deployment(s, deployment_id)
+                if d and d.status == "RUNNING":
+                    deployments.finish_failed(s, d, f"internal error: {e}")
+            return "FAILED"
+
+    def _requeue_later(self, deployment_id: int) -> None:
+        if self._stop.is_set():
+            return
+
+        def fire() -> None:
+            self._timers.discard(timer)
+            if not self._stop.is_set():
+                self.queue.enqueue(deployment_id)
+
+        timer = threading.Timer(BUSY_RETRY_SECONDS, fire)
+        timer.daemon = True
+        self._timers.add(timer)
+        timer.start()
