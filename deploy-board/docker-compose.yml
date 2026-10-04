@@ -1,16 +1,60 @@
-# Mounts the host Docker socket so DeployBoard can build/run images and start runner containers.
-# Only use on a trusted machine.
+# DeployBoard stack: PostgreSQL + Redis + API + a separate worker process.
+#
+#   export DB_SECRET_KEY=$(python3 -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')
+#   export POSTGRES_PASSWORD=change-me
+#   docker compose up --build
+#
+# SECURITY: the API and worker mount the host Docker socket (root-equivalent on the host). Use a trusted machine.
+# The workspace is bind-mounted at the SAME absolute path inside and outside the containers, because the Docker
+# daemon resolves `-v <path>:/workspace` of runner containers on the host.
+x-deployboard: &deployboard
+  build: .
+  depends_on:
+    postgres: {condition: service_healthy}
+    redis: {condition: service_healthy}
+  environment: &env
+    DB_URL: postgresql+psycopg://deployboard:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/deployboard
+    DB_REDIS_URL: redis://redis:6379/0
+    DB_SECRET_KEY: ${DB_SECRET_KEY:?set DB_SECRET_KEY (Fernet key)}
+    DB_RUNNER: docker
+    DB_WORKSPACE: ${DEPLOYBOARD_WORKSPACE:-/var/lib/deployboard/workspaces}
+  volumes:
+    - /var/run/docker.sock:/var/run/docker.sock
+    - ${DEPLOYBOARD_WORKSPACE:-/var/lib/deployboard/workspaces}:${DEPLOYBOARD_WORKSPACE:-/var/lib/deployboard/workspaces}
+  extra_hosts:
+    - "host.docker.internal:host-gateway"   # health URLs of deployed apps: http://host.docker.internal:<port>/health
+
 services:
-  deployboard:
-    build: ./backend
-    ports: ["8000:8000"]
+  api:
+    <<: *deployboard
     environment:
-      DB_URL: sqlite:////data/deployboard.db
-      DB_WORKSPACE: /data/workspaces
-      DB_KEY_FILE: /data/.secret.key
-      DB_RUNNER: docker
-    volumes:
-      - data:/data
-      - /var/run/docker.sock:/var/run/docker.sock
+      <<: *env
+      DB_EMBEDDED_WORKERS: "0"
+    ports: ["8000:8000"]
+  worker:
+    <<: *deployboard
+    command: ["python", "-m", "app.worker_main"]
+    healthcheck: {disable: true}
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: deployboard
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: deployboard
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U deployboard"]
+      interval: 5s
+      retries: 10
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes: [redisdata:/data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 10
+
 volumes:
-  data:
+  pgdata:
+  redisdata:
