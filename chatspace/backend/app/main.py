@@ -1,3 +1,4 @@
+import asyncio
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -10,7 +11,8 @@ from sqlalchemy import text
 from . import metrics
 from .api import auth, channels, messages, notifications, workspaces
 from .config import Settings, load_settings
-from .db import Base, make_engine, make_sessionmaker
+from .db import make_engine, make_sessionmaker
+from .migrate import ensure_current, upgrade
 from .realtime import ws
 from .realtime.hub import Hub
 from .realtime.presence import Presence
@@ -29,9 +31,10 @@ def create_app(settings: Settings | None = None, redis=None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        if settings.auto_migrate:  # dev / single instance; production runs `python -m app.migrate` as its own step
+            await asyncio.to_thread(upgrade, settings.database_url)
         engine = make_engine(settings.database_url)
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
+        await ensure_current(settings.database_url)
         app.state.engine = engine
         app.state.sessionmaker = make_sessionmaker(engine)
         app.state.redis = redis or make_redis(settings.redis_url)

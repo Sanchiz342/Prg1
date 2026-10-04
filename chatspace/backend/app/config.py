@@ -11,6 +11,7 @@ class Settings:
     presence_ttl: int
     typing_ttl: int
     auth_rate_limit: int  # requests per minute per client on /auth/*
+    auto_migrate: bool  # run `alembic upgrade head` at startup (dev/single instance); prod uses a migrate step
 
 
 def load_settings() -> Settings:
@@ -23,4 +24,5 @@ def load_settings() -> Settings:
         presence_ttl=int(env("PRESENCE_TTL", "60")),
         typing_ttl=int(env("TYPING_TTL", "5")),
         auth_rate_limit=int(env("AUTH_RATE_LIMIT", "30")),
+        auto_migrate=env("AUTO_MIGRATE", "false").lower() in ("1", "true", "yes"),
     )

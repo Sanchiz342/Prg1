@@ -10,5 +10,7 @@ WORKDIR /srv/backend
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY backend/app ./app
+COPY backend/alembic.ini ./alembic.ini
+COPY backend/migrations ./migrations
 COPY --from=web /web/dist /srv/frontend/dist
 CMD ["uvicorn", "app.main:get_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]

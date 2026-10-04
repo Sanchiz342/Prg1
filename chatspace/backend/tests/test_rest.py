@@ -15,10 +15,10 @@ def test_requires_auth(client):
     assert client.get("/api/workspaces", headers={"Authorization": "Bearer garbage"}).status_code == 401
 
 
-def test_passwords_are_hashed(client, tmp_path):
-    import sqlite3
+def test_passwords_are_hashed(client, db_url):
+    from tests.conftest import fetch_all
     client.post("/api/auth/register", json={"username": "dave", "email": "d@x.io", "password": "password123"})
-    row = sqlite3.connect(tmp_path / "t.db").execute("select password_hash from users").fetchone()
+    row = fetch_all(db_url, "select password_hash from users")[0]
     assert "password123" not in row[0] and row[0].startswith("$2")
 
 
@@ -138,7 +138,7 @@ def test_health_and_metrics(client):
     assert "chatspace_http_requests_total" in client.get("/metrics").text
 
 
-def test_auth_rate_limit(tmp_path):
+def test_auth_rate_limit(tmp_path, db_url):
     from fakeredis import FakeAsyncRedis, FakeServer
     from fastapi.testclient import TestClient
     from app.main import create_app

@@ -1,6 +1,8 @@
+import re
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, func, literal_column, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .. import events, metrics
@@ -125,8 +127,21 @@ async def remove_reaction(message_id: str, emoji: str, request: Request, user: U
         await request.app.state.hub.publish(events.channel_room(m.channel_id), {"type": events.REACTION_REMOVED, "message_id": m.id, "user_id": user.id, "reaction": emoji})
 
 
+WORD = re.compile(r"\w+")
+
+
+def _prefix_tsquery(q: str) -> str | None:
+    """'data conn' -> "'data':* & 'conn':*". Only \w tokens survive, so no tsquery syntax can be injected."""
+    words = WORD.findall(q)[:10]
+    return " & ".join(f"'{w}':*" for w in words) if words else None
+
+
 async def search_messages(s: AsyncSession, workspace_id: str, user_id: str, q: str, limit: int) -> list[dict]:
-    """ACL-aware search: only channels the user can see. ILIKE is portable; swap for tsvector on PostgreSQL."""
+    """ACL-aware search: only channels the user can see, applied in the same query as the text match.
+
+    PostgreSQL: full-text (GIN-indexed tsvector, AND of prefix terms, ranked). Other dialects (SQLite
+    dev/test): case-insensitive substring fallback.
+    """
     q = q.strip()
     if not q:
         return []
@@ -134,11 +149,16 @@ async def search_messages(s: AsyncSession, workspace_id: str, user_id: str, q: s
     visible = select(Channel.id).where(
         Channel.workspace_id == workspace_id, or_(Channel.type == "PUBLIC", Channel.id.in_(member_of))
     )
-    pattern = "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
-    rows = list(await s.scalars(
-        select(Message)
-        .where(Message.channel_id.in_(visible), Message.deleted_at.is_(None), Message.content.ilike(pattern, escape="\\"))
-        .order_by(Message.created_at.desc(), Message.id.desc())
-        .limit(limit)
-    ))
+    stmt = select(Message).where(Message.channel_id.in_(visible), Message.deleted_at.is_(None))
+    if s.get_bind().dialect.name == "postgresql":
+        tsq = _prefix_tsquery(q)
+        if tsq is None:
+            return []
+        vector = literal_column("messages.search_vector")
+        query = func.to_tsquery("simple", tsq)
+        stmt = stmt.where(vector.op("@@")(query)).order_by(func.ts_rank_cd(vector, query).desc(), Message.created_at.desc(), Message.id.desc())
+    else:
+        pattern = "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+        stmt = stmt.where(Message.content.ilike(pattern, escape="\\")).order_by(Message.created_at.desc(), Message.id.desc())
+    rows = list(await s.scalars(stmt.limit(limit)))
     return await serialize(s, rows, user_id)

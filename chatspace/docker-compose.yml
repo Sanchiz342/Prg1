@@ -1,19 +1,29 @@
 services:
   postgres:
     image: postgres:16-alpine
-    environment: {POSTGRES_USER: chat, POSTGRES_PASSWORD: chat, POSTGRES_DB: chatspace}
+    # full-text search needs a UTF8 database (the migration refuses to run otherwise)
+    environment: {POSTGRES_USER: chat, POSTGRES_PASSWORD: chat, POSTGRES_DB: chatspace, POSTGRES_INITDB_ARGS: "--encoding=UTF8"}
     healthcheck: {test: ["CMD-SHELL", "pg_isready -U chat"], interval: 3s, retries: 20}
     volumes: [pgdata:/var/lib/postgresql/data]
   redis:
     image: redis:7-alpine
     healthcheck: {test: ["CMD", "redis-cli", "ping"], interval: 3s, retries: 20}
+  migrate:   # one-shot: applies Alembic migrations, then exits; the API instances wait for it
+    build: {context: ., dockerfile: backend/Dockerfile}
+    command: ["python", "-m", "app.migrate"]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://chat:chat@postgres/chatspace
+    depends_on: {postgres: {condition: service_healthy}}
+    restart: "no"
   backend: &backend
     build: {context: ., dockerfile: backend/Dockerfile}
     environment:
       DATABASE_URL: postgresql+asyncpg://chat:chat@postgres/chatspace
       REDIS_URL: redis://redis:6379/0
       JWT_SECRET: ${JWT_SECRET:-change-me-to-a-long-random-string-0123456789}
-    depends_on: {postgres: {condition: service_healthy}, redis: {condition: service_healthy}}
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
     ports: ["8000:8000"]
   backend2:   # second instance: proves cross-instance fan-out via Redis Pub/Sub
     <<: *backend
