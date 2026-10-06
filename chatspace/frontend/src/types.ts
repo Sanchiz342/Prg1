@@ -32,6 +32,8 @@ export interface AppNotification {
   text: string; read_at: string | null; created_at: string;
 }
 
+export type UnreadMap = Record<string, { unread: number; mentions: number }>;
+
 export type ServerEvent =
   | { type: "ready"; user_id: string }
   | { type: "subscribed"; channel_id: string }
@@ -42,4 +44,6 @@ export type ServerEvent =
   | { type: "user.online" | "user.offline"; user_id: string }
   | { type: "typing.started" | "typing.stopped"; channel_id: string; user_id: string }
   | { type: "channel.created"; channel: Channel }
+  | { type: "channel.activity"; workspace_id: string; channel_id: string; message_id: string; author_id: string; reply_to: string | null }
+  | { type: "channel.read"; workspace_id: string; channel_id: string }
   | { type: "notification.created"; notification: AppNotification };

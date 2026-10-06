@@ -85,3 +85,13 @@ class Notification(Base):
     text: Mapped[str] = mapped_column(String(300))
     read_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class ChannelRead(Base):
+    """Per-user read marker. Absent row == "everything since the channel was created is unread"."""
+    __tablename__ = "channel_reads"
+    channel_id: Mapped[str] = mapped_column(ForeignKey("channels.id", ondelete="CASCADE"), primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    # created_at of the newest message the user has seen (taken from the data, not the wall clock,
+    # so clock skew between API instances cannot hide or resurrect messages)
+    last_read_at: Mapped[datetime] = mapped_column(DateTime)

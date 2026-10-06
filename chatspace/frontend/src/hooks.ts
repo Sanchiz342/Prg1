@@ -8,6 +8,8 @@ export const useChannels = (wid: string | undefined) =>
   useQuery({ queryKey: ["channels", wid], queryFn: () => api.channels(wid!), enabled: !!wid });
 export const useMembers = (wid: string | undefined) =>
   useQuery({ queryKey: ["members", wid], queryFn: () => api.members(wid!), enabled: !!wid, refetchInterval: 60_000 });
+export const useUnread = (wid: string | undefined) =>
+  useQuery({ queryKey: ["unread", wid], queryFn: () => api.unread(wid!), enabled: !!wid });
 export const useNotifications = () => useQuery({ queryKey: ["notifications"], queryFn: api.notifications });
 
 export const useMessages = (cid: string | undefined) =>

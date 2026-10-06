@@ -34,6 +34,10 @@ h1, h2 { margin: 0; }
 .sidebar select option { color: #000; }
 .ws-switch { display: flex; gap: 6px; }
 .channel { width: 100%; text-align: left; border: 0 !important; padding: 4px 8px; }
+.channel { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.channel.has-unread { font-weight: 700; color: #fff; }
+.pill { background: rgba(255,255,255,.28); color: #fff; border-radius: 10px; padding: 0 7px; font-size: 12px; font-weight: 700; min-width: 20px; text-align: center; }
+.pill.mention { background: var(--err); }
 .channel:hover { background: rgba(255,255,255,.1); } .channel.on { background: #1264a3; color: #fff; }
 .user-panel { margin-top: auto; padding-top: 12px; display: flex; justify-content: space-between; align-items: center; }
 .sidebar .link { color: var(--sidefg); }

@@ -29,6 +29,25 @@ export function Chat({ workspace, channel, onThread }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [channel.id]);
 
+  // unread: tell the realtime layer what is on screen, and mark the channel read while the user is
+  // looking at its live end (tab visible + scrolled to the bottom)
+  const latestId = messages.at(-1)?.id;
+  const markIfSeen = () => {
+    rt.setViewing(channel.id, workspace.id, stick.current);
+    if (q.isSuccess && stick.current && document.visibilityState === "visible") rt.markRead(channel.id, workspace.id);
+  };
+  useEffect(() => {
+    markIfSeen();
+    document.addEventListener("visibilitychange", markIfSeen);
+    window.addEventListener("focus", markIfSeen);
+    return () => {
+      document.removeEventListener("visibilitychange", markIfSeen);
+      window.removeEventListener("focus", markIfSeen);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [channel.id, q.isSuccess, latestId]);
+  useEffect(() => () => rt.setViewing(null), [channel.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useLayoutEffect(() => {
     const el = listRef.current;
     if (!el) return;
@@ -46,7 +65,9 @@ export function Chat({ workspace, channel, onThread }: Props) {
 
       <div className="messages" ref={listRef} onScroll={(e) => {
         const el = e.currentTarget;
+        const wasFollowing = stick.current;
         stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+        if (stick.current !== wasFollowing) markIfSeen(); // reached the bottom -> read; scrolled up -> new ones stay unread
       }}>
         {q.isPending && <p className="muted center">Loading messages…</p>}
         {q.isError && <p className="error center">Couldn't load messages. <button className="link" onClick={() => q.refetch()}>Retry</button></p>}

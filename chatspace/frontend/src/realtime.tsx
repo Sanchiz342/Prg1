@@ -1,9 +1,11 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "./auth";
+import { bumpUnread, clearUnread, singleFlight } from "./unread";
 import { applyReaction, bumpReplyCount, markDeleted, patchMessage, upsertMessage, type MessagesCache } from "./cache";
 import { RealtimeClient, type ConnectionStatus } from "./ws";
-import type { AppNotification, Member, Message, ServerEvent } from "./types";
+import { api } from "./api";
+import type { AppNotification, Member, Message, ServerEvent, UnreadMap } from "./types";
 
 interface RealtimeState {
   status: ConnectionStatus;
@@ -11,6 +13,9 @@ interface RealtimeState {
   unsubscribe(channelId: string): void;
   sendTyping(channelId: string, started: boolean): void;
   typingIn(channelId: string): string[];
+  /** The chat view tells us which channel is on screen and whether the user is following the live end of it. */
+  setViewing(channelId: string | null, workspaceId?: string, following?: boolean): void;
+  markRead(channelId: string, workspaceId: string): void;
 }
 
 const Ctx = createContext<RealtimeState | null>(null);
@@ -25,6 +30,24 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
   const [typing, setTyping] = useState<Record<string, string[]>>({});
   const client = useRef<RealtimeClient | null>(null);
   const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  const viewing = useRef<{ channelId: string | null; workspaceId?: string; following: boolean }>({ channelId: null, following: false });
+
+  const workspaceOf = useRef(new Map<string, string>());
+  const sendRead = useRef(singleFlight(
+    (channelId) => api.markChannelRead(channelId).catch((e) => {
+      qc.invalidateQueries({ queryKey: ["unread", workspaceOf.current.get(channelId)] }); // unsure what the server has: resync
+      throw e;
+    }),
+    (channelId) => viewing.current.channelId === channelId && viewing.current.following && document.visibilityState === "visible",
+  ));
+  const markRead = useCallback((channelId: string, workspaceId: string) => {
+    workspaceOf.current.set(channelId, workspaceId);
+    qc.setQueryData<UnreadMap>(["unread", workspaceId], (d) => clearUnread(d, channelId)); // optimistic
+    sendRead.current(channelId);
+  }, [qc]);
+
+  const isViewing = (channelId: string) =>
+    viewing.current.channelId === channelId && viewing.current.following && document.visibilityState === "visible";
 
   const setTypingUser = useCallback((channel: string, user: string, on: boolean) => {
     const key = `${channel}:${user}`;
@@ -88,8 +111,21 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
         case "channel.created":
           qc.invalidateQueries({ queryKey: ["channels", e.channel.workspace_id] });
           break;
+        case "channel.activity": {
+          if (e.author_id === userIdRef.current) break;
+          if (isViewing(e.channel_id)) { markRead(e.channel_id, e.workspace_id); break; }  // on screen: already seen
+          qc.setQueryData<UnreadMap>(["unread", e.workspace_id], (d) => (d ? bumpUnread(d, e.channel_id) : d));
+          break;
+        }
+        case "channel.read":
+          qc.setQueryData<UnreadMap>(["unread", e.workspace_id], (d) => clearUnread(d, e.channel_id));
+          break;
         case "notification.created":
           qc.setQueryData<AppNotification[]>(["notifications"], (d) => [e.notification, ...(d ?? [])]);
+          if (e.notification.kind === "mention" && e.notification.channel_id && !isViewing(e.notification.channel_id)) {
+            qc.setQueriesData<UnreadMap>({ queryKey: ["unread"] }, (d) =>
+              d && e.notification.channel_id && e.notification.channel_id in d ? bumpUnread(d, e.notification.channel_id, "mentions") : d);
+          }
           if (e.notification.kind === "invitation") qc.invalidateQueries({ queryKey: ["workspaces"] }); // newly added to a workspace
           break;
       }
@@ -101,7 +137,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       onStatus: setStatus,
       // after a drop we may have missed events: refetch everything visible
       onReady: (isReconnect) => {
-        if (isReconnect) qc.invalidateQueries({ predicate: (q) => ["messages", "replies", "members", "notifications", "channels"].includes(q.queryKey[0] as string) });
+        if (isReconnect) qc.invalidateQueries({ predicate: (q) => ["messages", "replies", "members", "notifications", "channels", "unread"].includes(q.queryKey[0] as string) });
       },
       onAuthFailure: logout,
     });
@@ -124,7 +160,9 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     unsubscribe: (c) => client.current?.unsubscribe(c),
     sendTyping: (c, s) => client.current?.typing(c, s),
     typingIn: (c) => typing[c] ?? [],
-  }), [status, typing]);
+    setViewing: (channelId, workspaceId, following = true) => { viewing.current = { channelId, workspaceId, following }; },
+    markRead,
+  }), [status, typing, markRead]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

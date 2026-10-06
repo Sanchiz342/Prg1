@@ -17,6 +17,7 @@ const metric = async (base, name) => {
   const m = t.match(new RegExp(`^${name} ([0-9.e+-]+)$`, "m"));
   return m ? Number(m[1]) : 0;
 };
+const chan = (p, name) => p.locator("button.channel", { hasText: name });
 const msg = (p, text) => p.locator("article", { hasText: text }).first();
 
 if (phase === "flow") {
@@ -69,15 +70,15 @@ if (phase === "flow") {
     for (const [name, priv] of [["dev", false], ["secret", true]]) {
       answers.push(name, priv);               // 1st prompt: channel name, 2nd confirm: "Make it private?"
       await a.getByLabel("New channel").click();
-      await a.getByRole("button", { name: new RegExp(`${priv ? "🔒" : "#"} ${name}`) }).waitFor();
+      await chan(a, name).waitFor();
     }
-    await b.getByRole("button", { name: /# dev/ }).waitFor({ timeout: 10000 }); // channel.created via Redis
-    ok(await b.getByRole("button", { name: /secret/ }).count() === 0, "bob does not see private #secret");
+    await chan(b, "dev").waitFor({ timeout: 10000 }); // channel.created via Redis
+    ok(await chan(b, "secret").count() === 0, "bob does not see private #secret");
   });
 
   await step("alice -> bob message crosses instances (Redis Pub/Sub)", async () => {
-    await b.getByRole("button", { name: /# general/ }).click();
-    await a.getByRole("button", { name: /# general/ }).click();
+    await chan(b, "general").click();
+    await chan(a, "general").click();
     await a.getByLabel("Message #general").fill("Hello from instance 1");
     await a.keyboard.press("Enter");
     await b.getByText("Hello from instance 1").waitFor({ timeout: 10000 });
@@ -126,10 +127,10 @@ if (phase === "flow") {
   });
 
   await step("FTS via instance 1 with private-channel isolation", async () => {
-    await a.getByRole("button", { name: /🔒 secret/ }).click();
+    await chan(a, "secret").click();
     await a.getByLabel("Message #secret").fill("launch codename falcon (private)");
     await a.keyboard.press("Enter");
-    await a.getByRole("button", { name: /# dev/ }).click();
+    await chan(a, "dev").click();
     await a.getByLabel("Message #dev").fill("falcon public status update");
     await a.keyboard.press("Enter");
     await a.getByText("falcon public status update").waitFor();
@@ -147,15 +148,64 @@ if (phase === "flow") {
   });
 
   await step("offline catch-up: bob goes offline, alice posts, bob reconnects and sees it", async () => {
-    await b.getByRole("button", { name: /# general/ }).click();
+    await chan(b, "general").click();
     await b.context().setOffline(true);
     await b.getByText(/Connection lost/).waitFor({ timeout: 15000 }).catch(() => {});
-    await a.getByRole("button", { name: /# general/ }).click();
+    await chan(a, "general").click();
     await a.getByLabel("Message #general").fill("sent while bob was offline");
     await a.keyboard.press("Enter");
     await a.getByText("sent while bob was offline").waitFor();
     await b.context().setOffline(false);
     await b.getByText("sent while bob was offline").waitFor({ timeout: 20000 });
+  });
+
+  // ---- unread counters (run last: they move bob between channels) ----
+  const labels = (p) => p.locator("button.channel").evaluateAll((els) => els.map((e) => e.getAttribute("aria-label")));
+  await step("unread: badge appears on bob (instance 2) for a message alice (instance 1) writes in a channel bob is not viewing", async () => {
+    await chan(a, "general").click();
+    await chan(b, "dev").click();                                              // bob looks at #dev (reads it)
+    await b.getByRole("button", { name: "dev", exact: true }).waitFor();
+    await a.getByLabel("Message #general").fill("ping for unread");
+    await a.keyboard.press("Enter");
+    await b.getByRole("button", { name: "general, 1 unread" }).waitFor({ timeout: 10000 });
+    const l = await labels(b);
+    ok(!l.some((x) => /unread/.test(x) && !x.startsWith("general")), `no other channel has a badge for bob: ${JSON.stringify(l)}`);
+  });
+  await step("unread: private channel activity never reaches bob (no badge, no leak)", async () => {
+    await chan(a, "secret").click();
+    await a.getByLabel("Message #secret").fill("private unread test");
+    await a.keyboard.press("Enter");
+    await a.getByText("private unread test").waitFor();
+    await chan(a, "general").click();
+    await b.waitForTimeout(1500);
+    const l = await labels(b);
+    ok(!l.some((x) => x.startsWith("secret")) && l.includes("general, 1 unread"), `bob's sidebar unchanged: ${JSON.stringify(l)}`);
+  });
+  await step("unread: mention turns the badge into a mention badge and counts; tab title shows the total", async () => {
+    await a.getByLabel("Message #general").fill("@bob unread mention");
+    await a.keyboard.press("Enter");
+    await b.getByRole("button", { name: "general, 2 unread, 1 mentions" }).waitFor({ timeout: 10000 });
+    ok(await b.locator(".pill.mention").count() === 1, "badge is rendered as a mention badge");
+    ok((await b.title()).startsWith("(2)"), `tab title: ${await b.title()}`);
+  });
+  await step("unread: second tab of bob shows it too; reading in tab 1 clears tab 2 (channel.read) and survives a reload", async () => {
+    const b2 = await b.context().newPage();
+    await b2.goto(B);
+    await b2.getByRole("button", { name: "general, 2 unread, 1 mentions" }).waitFor({ timeout: 10000 });
+    await chan(b2, "dev").click();                                             // tab 2 looks at #dev
+    await chan(b, "general").click();                                          // tab 1 opens #general -> read
+    await b2.getByRole("button", { name: "general", exact: true }).waitFor({ timeout: 10000 });
+    ok(true, "tab 2 badge cleared by the channel.read event");
+    await b.reload();
+    await b.locator("button.channel").first().waitFor();
+    await b.waitForTimeout(800);
+    const l = await labels(b);
+    ok(!l.some((x) => /unread/.test(x)), `still cleared after reload (server-side marker): ${JSON.stringify(l)}`);
+    await b2.close();
+  });
+  await step("unread: the author never gets a badge for their own messages", async () => {
+    const l = await labels(a);
+    ok(!l.some((x) => /unread/.test(x)), `alice's sidebar: ${JSON.stringify(l)}`);
   });
 
   // each instance really served its own user
@@ -176,7 +226,7 @@ if (phase === "after-restart") {
     await b.getByLabel("Email").fill("bob@x.io");
     await b.getByLabel("Password").fill("password123");
     await b.getByRole("button", { name: "Log in" }).click();
-    await b.getByRole("button", { name: /# general/ }).click();
+    await chan(b, "general").click();
     await b.getByRole("heading", { name: /# general/ }).waitFor({ timeout: 15000 });
   });
   await step("history survived the restart", async () => {

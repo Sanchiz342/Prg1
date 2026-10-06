@@ -1,4 +1,4 @@
-import type { AppNotification, Channel, Member, Message, MessagePage, User, Workspace } from "./types";
+import type { AppNotification, Channel, Member, Message, MessagePage, UnreadMap, User, Workspace } from "./types";
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) { super(message); }
@@ -55,6 +55,9 @@ export const api = {
   remove: (mid: string) => request<void>("DELETE", `/messages/${mid}`),
   react: (mid: string, emoji: string) => request<void>("PUT", `/messages/${mid}/reactions/${enc(emoji)}`),
   unreact: (mid: string, emoji: string) => request<void>("DELETE", `/messages/${mid}/reactions/${enc(emoji)}`),
+
+  unread: (wid: string) => request<{ channels: UnreadMap }>("GET", `/workspaces/${wid}/unread`).then((d) => d.channels),
+  markChannelRead: (cid: string) => request<void>("POST", `/channels/${cid}/read`),
 
   notifications: () => request<AppNotification[]>("GET", "/notifications"),
   markRead: (id: string) => request<void>("POST", `/notifications/${id}/read`),

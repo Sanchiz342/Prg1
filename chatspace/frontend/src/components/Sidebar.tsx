@@ -2,7 +2,8 @@ import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api";
 import { useAuth } from "../auth";
-import { useChannels, useWorkspaces } from "../hooks";
+import { useChannels, useUnread, useWorkspaces } from "../hooks";
+import { badge } from "../unread";
 import type { Channel, Workspace } from "../types";
 
 interface Props {
@@ -17,6 +18,7 @@ export function Sidebar({ workspace, channel, onWorkspace, onChannel }: Props) {
   const qc = useQueryClient();
   const workspaces = useWorkspaces();
   const channels = useChannels(workspace?.id);
+  const unread = useUnread(workspace?.id).data;
   const [error, setError] = useState("");
   const isAdmin = workspace?.role === "OWNER" || workspace?.role === "ADMIN";
 
@@ -50,13 +52,19 @@ export function Sidebar({ workspace, channel, onWorkspace, onChannel }: Props) {
       {channels.isPending && workspace && <p className="muted">Loading…</p>}
       {channels.isError && <p className="error">Couldn't load channels. <button className="link" onClick={() => channels.refetch()}>Retry</button></p>}
       <ul>
-        {channels.data?.map((c) => (
-          <li key={c.id}>
-            <button className={c.id === channel?.id ? "channel on" : "channel"} aria-current={c.id === channel?.id} onClick={() => onChannel(c)}>
-              {c.type === "PRIVATE" ? "🔒" : "#"} {c.name}
-            </button>
-          </li>
-        ))}
+        {channels.data?.map((c) => {
+          const u = unread?.[c.id];
+          const n = u?.unread ?? 0;
+          return (
+            <li key={c.id}>
+              <button className={`channel${c.id === channel?.id ? " on" : ""}${n > 0 ? " has-unread" : ""}`} aria-current={c.id === channel?.id}
+                aria-label={n > 0 ? `${c.name}, ${n} unread${u!.mentions ? `, ${u!.mentions} mentions` : ""}` : c.name} onClick={() => onChannel(c)}>
+                <span>{c.type === "PRIVATE" ? "🔒" : "#"} {c.name}</span>
+                {n > 0 && <span className={u!.mentions > 0 ? "pill mention" : "pill"}>{badge(n)}</span>}
+              </button>
+            </li>
+          );
+        })}
       </ul>
       {error && <p role="alert" className="error" onClick={() => setError("")}>{error}</p>}
 

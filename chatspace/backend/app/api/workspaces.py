@@ -8,6 +8,7 @@ from ..deps import current_user, get_session
 from ..models import Channel, ChannelMember, Message, Notification, Reaction, User, Workspace, WorkspaceMember
 from ..permissions import RANK, require_workspace
 from ..services.notifications import notify
+from ..services.unread import init_markers, visible_channel_ids
 from .messages import search_messages
 
 router = APIRouter(prefix="/workspaces", tags=["workspaces"])
@@ -39,6 +40,7 @@ async def create_workspace(body: WorkspaceIn, request: Request, user: User = Dep
     general = Channel(workspace_id=w.id, name="general", type="PUBLIC")
     s.add(general)
     await s.commit()
+    await init_markers(s, user.id, [general])
     # sockets that were opened before this workspace existed must start receiving its events
     await request.app.state.hub.control("join", user.id, [events.workspace_room(w.id)])
     return ws_dict(w, "OWNER")
@@ -97,6 +99,8 @@ async def add_member(workspace_id: str, body: MemberIn, request: Request, user: 
     s.add(WorkspaceMember(workspace_id=workspace_id, user_id=target.id, role=body.role))
     await s.commit()
     w = await s.get(Workspace, workspace_id)
+    visible = list(await s.scalars(select(Channel).where(Channel.id.in_(visible_channel_ids(workspace_id, target.id)))))
+    await init_markers(s, target.id, visible)  # a new member starts caught up on existing public channels
     await request.app.state.hub.control("join", target.id, [events.workspace_room(workspace_id)])
     await notify(s, request.app.state.hub, target.id, "invitation", f"{user.username} added you to {w.name}")
     return {"user_id": target.id, "role": body.role}

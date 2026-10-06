@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from .. import events
 from ..deps import current_user, get_session
 from ..models import Channel, ChannelMember, User, WorkspaceMember
+from ..services.unread import init_markers, mark_read, unread_for_workspace
 from ..permissions import require_channel, require_workspace
 
 router = APIRouter(tags=["channels"])
@@ -37,6 +38,7 @@ async def create_channel(workspace_id: str, body: ChannelIn, request: Request, u
         raise HTTPException(409, "Channel name already exists")
     s.add(ChannelMember(channel_id=c.id, user_id=user.id))
     await s.commit()
+    await init_markers(s, user.id, [c])
     if c.type == "PUBLIC":
         await request.app.state.hub.publish(events.workspace_room(workspace_id), {"type": events.CHANNEL_CREATED, "channel": ch_dict(c)})
     else:
@@ -81,4 +83,19 @@ async def add_channel_member(channel_id: str, body: ChannelMemberIn, user: User 
     if await s.get(ChannelMember, (c.id, body.user_id)) is None:
         s.add(ChannelMember(channel_id=c.id, user_id=body.user_id))
         await s.commit()
+        await init_markers(s, body.user_id, [c])  # history of a channel you were just added to is not "unread"
     return {"channel_id": c.id, "user_id": body.user_id}
+
+
+@router.get("/workspaces/{workspace_id}/unread")
+async def unread(workspace_id: str, user: User = Depends(current_user), s: AsyncSession = Depends(get_session)):
+    await require_workspace(s, workspace_id, user.id)
+    return {"channels": await unread_for_workspace(s, workspace_id, user.id)}
+
+
+@router.post("/channels/{channel_id}/read", status_code=204)
+async def read_channel(channel_id: str, request: Request, user: User = Depends(current_user), s: AsyncSession = Depends(get_session)):
+    c = await require_channel(s, channel_id, user.id)
+    await mark_read(s, c, user.id)
+    # tell this user's other tabs/devices (on any instance) to clear the badge
+    await request.app.state.hub.publish(events.user_room(user.id), {"type": events.CHANNEL_READ, "workspace_id": c.workspace_id, "channel_id": c.id})

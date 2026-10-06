@@ -16,7 +16,7 @@ from tests.conftest import PG_URL, fetch_all, make_settings
 pg_only = pytest.mark.skipif(not PG_URL, reason="needs PostgreSQL: set TEST_DATABASE_URL=postgresql+asyncpg://...")
 
 APP_TABLES = {"users", "workspaces", "workspace_members", "channels", "channel_members",
-              "messages", "message_reactions", "notifications"}
+              "messages", "message_reactions", "notifications", "channel_reads"}
 EXPECTED_INDEXES = {
     "users": {"ix_users_email", "ix_users_username"},
     "channels": {"ix_channels_workspace_id"},
@@ -61,11 +61,12 @@ def drift(url):
 
 
 def create_all_legacy(url):
-    """What the app did before Alembic: Base.metadata.create_all() and nothing else."""
+    """What the app did before Alembic: create_all() of the tables that existed then (0001 = no channel_reads)."""
     async def go():
         engine = create_async_engine(url)
         async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
+            old = [tb for tb in Base.metadata.sorted_tables if tb.name != "channel_reads"]
+            await conn.run_sync(lambda c: Base.metadata.create_all(c, tables=old))
         await engine.dispose()
     run(go())
 
@@ -89,14 +90,14 @@ def seed(url):
 
 def test_fresh_database_upgrades_to_head(db_url):
     migrate.upgrade(db_url)
-    assert run(migrate.current_revision(db_url)) == migrate.head_revision() == "0002"
+    assert run(migrate.current_revision(db_url)) == migrate.head_revision() == "0003"
     assert tables(db_url) == APP_TABLES | {"alembic_version"}
 
 
 def test_upgrade_is_idempotent(db_url):
     migrate.upgrade(db_url)
     migrate.upgrade(db_url)
-    assert run(migrate.current_revision(db_url)) == "0002"
+    assert run(migrate.current_revision(db_url)) == migrate.head_revision()
 
 
 def test_migrations_match_models(db_url):
@@ -122,8 +123,9 @@ def test_database_created_by_old_create_all_is_adopted_without_data_loss(db_url)
     create_all_legacy(db_url)  # no alembic_version table, like every pre-Alembic deployment
     seed(db_url)
     migrate.upgrade(db_url)
-    assert run(migrate.current_revision(db_url)) == "0002"
+    assert run(migrate.current_revision(db_url)) == migrate.head_revision()
     assert fetch_all(db_url, "select content from messages") == [("legacy database tuning notes",)]
+    assert fetch_all(db_url, "select channel_id, user_id from channel_reads") == [("c1", "u1")]  # backfilled by 0003
     assert drift(db_url) == []
 
 
@@ -138,6 +140,34 @@ def test_app_starts_once_migrated_without_auto_migrate(tmp_path, db_url):
     migrate.upgrade(db_url)
     with TestClient(create_app(make_settings(tmp_path, auto_migrate=False), redis=FakeAsyncRedis(server=FakeServer()))) as c:
         assert c.get("/api/health").json()["status"] == "ok"
+
+
+def test_upgrade_to_0003_backfills_read_markers_so_history_is_not_unread(db_url):
+    migrate.upgrade(db_url, "0002")
+    seed(db_url)  # alice owns #general which already holds one message
+    async def more():
+        from sqlalchemy import text
+        engine = create_async_engine(db_url)
+        async with engine.begin() as c:
+            await c.execute(text("INSERT INTO users (id, username, email, password_hash, created_at) VALUES ('u2','bob','b@x.io','h','2025-01-01 00:00:00')"))
+            await c.execute(text("INSERT INTO workspace_members (workspace_id, user_id, role) VALUES ('w1','u2','MEMBER')"))
+            await c.execute(text("INSERT INTO channels (id, workspace_id, name, type, created_at) VALUES ('c2','w1','secret','PRIVATE','2025-01-02 00:00:00')"))
+            await c.execute(text("INSERT INTO channel_members (channel_id, user_id) VALUES ('c2','u1')"))
+        await engine.dispose()
+    run(more())
+    migrate.upgrade(db_url)
+    rows = {(c, u): str(ts)[:19] for c, u, ts in fetch_all(db_url, "select channel_id, user_id, last_read_at from channel_reads")}
+    assert rows == {
+        ("c1", "u1"): "2025-01-01 00:00:00",   # newest message of #general
+        ("c1", "u2"): "2025-01-01 00:00:00",   # public channel: every member, bob included
+        ("c2", "u1"): "2025-01-02 00:00:00",   # private channel with no messages: its creation time, members only
+    }
+
+
+def test_downgrade_0003_drops_only_the_markers(db_url):
+    migrate.upgrade(db_url)
+    migrate.downgrade(db_url, "0002")
+    assert "channel_reads" not in tables(db_url) and "messages" in tables(db_url)
 
 
 # ---------------------------------------------------------------- PostgreSQL only
@@ -185,7 +215,7 @@ def test_concurrent_instances_can_migrate_at_the_same_time(db_url):
                               stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True) for _ in range(4)]
     results = [(p.wait(timeout=60), p.stdout.read()) for p in procs]
     assert [code for code, _ in results] == [0, 0, 0, 0], results
-    assert run(migrate.current_revision(db_url)) == "0002"
+    assert run(migrate.current_revision(db_url)) == migrate.head_revision()
     assert fetch_all(db_url, "select count(*) from alembic_version") == [(1,)]
 
 

@@ -7,7 +7,8 @@ import { Login } from "./components/Login";
 import { RightPanel } from "./components/RightPanel";
 import { Sidebar } from "./components/Sidebar";
 import { Thread } from "./components/Thread";
-import { useChannels, useWorkspaces } from "./hooks";
+import { useChannels, useUnread, useWorkspaces } from "./hooks";
+import { totalUnread } from "./unread";
 import { RealtimeProvider } from "./realtime";
 
 export function App() {
@@ -29,6 +30,13 @@ function Shell() {
   const channel = channels.data?.find((c) => c.id === chId) ?? channels.data?.[0];
 
   useEffect(() => { setThreadId(null); }, [channel?.id]);
+
+  const unread = useUnread(workspace?.id).data;
+  const total = totalUnread(unread);
+  useEffect(() => {
+    document.title = total > 0 ? `(${total > 99 ? "99+" : total}) ChatSpace` : "ChatSpace";
+    return () => { document.title = "ChatSpace"; };
+  }, [total]);
 
   return (
     <div className={`shell${navOpen ? " nav-open" : ""}`}>

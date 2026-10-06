@@ -23,3 +23,10 @@ def workspace_room(workspace_id: str) -> str:
 
 def user_room(user_id: str) -> str:
     return f"user:{user_id}"
+
+# Content-free "something happened in this channel" ping. Public channels: sent to the workspace room;
+# private channels: sent only to the member's own user room. Drives unread badges for channels the
+# client has not subscribed to; it never carries message text.
+CHANNEL_ACTIVITY = "channel.activity"
+# The user read a channel (on another tab/device): clear the badge everywhere.
+CHANNEL_READ = "channel.read"

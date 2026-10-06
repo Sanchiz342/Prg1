@@ -30,7 +30,8 @@ alembic revision --autogenerate -m "describe change"   # after editing app/model
   and exits with an explanation if not. `AUTO_MIGRATE=true` makes it migrate on startup instead
   (dev / single instance). Several processes may migrate simultaneously (PostgreSQL advisory lock).
 - `0001` is the baseline (everything `create_all()` used to create); `0002` adds a generated `tsvector`
-  column + GIN index on `messages` (PostgreSQL only; no-op elsewhere).
+  column + GIN index on `messages` (PostgreSQL only; no-op elsewhere); `0003` adds `channel_reads` (unread markers)
+  and backfills one per user and visible channel so existing history does not suddenly count as unread.
 - A database created by the pre-Alembic version is detected (tables but no `alembic_version`), stamped as
   `0001` and upgraded — existing rows are preserved and become searchable.
 
@@ -42,6 +43,22 @@ every word is a prefix match and all words must match (`datab pool` finds "datab
 results ranked with `ts_rank_cd`. The query text is reduced to word tokens, so tsquery syntax can't be injected.
 The visibility filter (public channels + private channels you belong to, in this workspace) is part of the same SQL
 query, so a message you can't read can never be returned.
+
+### Unread counters
+
+- `GET /api/workspaces/{id}/unread` → `{"channels": {"<channel_id>": {"unread": n, "mentions": m}}}` (non-zero entries
+  only, visible channels only); `POST /api/channels/{id}/read` moves the caller's marker to the newest message
+  (never backwards) and clears that channel's mention/reply notifications.
+- Unread = messages newer than the user's marker (`channel_reads.last_read_at`, a message timestamp, not wall-clock),
+  not deleted, not written by the user; replies count. No marker yet = since the channel was created, so a *new*
+  channel's first messages are unread for everyone, while a user who is added to a workspace/channel starts caught up.
+- Live: every message sends a content-free `channel.activity` ping (public channel → workspace room, private → only
+  that channel's members' user rooms, so nothing leaks to non-members) and reading sends `channel.read` to the
+  user's own room, so a second tab/device clears its badge. All of it goes through Redis, i.e. across instances.
+- Client: badges (capped at `99+`, red when mentioned), tab title `(n) ChatSpace`, read-while-viewing only when the
+  tab is visible and scrolled to the live end. Read requests are single-flight and sent immediately, never
+  debounced: a delayed request would mark whatever arrived meanwhile as read (found by the Compose run).
+- Only the open workspace's counters are tracked live; other workspaces are not shown yet.
 
 ### Dev without Docker
 
@@ -69,7 +86,10 @@ npm run build      # -> frontend/dist, served by the backend at /
 - Frontend is served by both instances; each instance holds its own WebSocket and Redis publishes from both.
 - Browser flow across instances: register/login, workspace, public + private channels (private hidden from non-members),
   messages both directions, typing, presence, reactions, replies, edit, delete, mention/reply notifications,
-  offline → reconnect catch-up, full-text search with private-channel isolation.
+  offline → reconnect catch-up, full-text search with private-channel isolation, unread badges across instances
+  (incl. mention badge, no leak from private channels, two tabs, reload).
+- Upgrade path: a stack started on the previous release (schema 0002, with data) was rebuilt on the same volume;
+  `migrate` applied 0003, kept all rows and backfilled the markers (existing history showed 0 unread).
 - `docker compose down` then `up` with the same volume: users, messages, migration state kept, `migrate` is a no-op,
   login works on the other instance, search still works.
 
@@ -116,6 +136,6 @@ Server → client: `ready`, `subscribed`, `error`, `message.created|updated|dele
 ## Status / not done yet
 
 Done: stages 1–5 core (auth, RBAC, messaging, real-time, Redis distribution, metrics, tests, Docker Compose stack verified end to end).
-Not yet: unread counters, DMs, attachments (MinIO),
+Not yet: unread counts for workspaces other than the open one, a "new messages" divider, DMs, attachments (MinIO),
 AI assistant, CI workflow. The frontend has no browser E2E suite in the repo yet (the flow was verified manually with Playwright against a real backend). Presence on multi-instance deployments is per-user TTL: closing one of several instances' sockets
 for the same user clears presence until the next heartbeat.

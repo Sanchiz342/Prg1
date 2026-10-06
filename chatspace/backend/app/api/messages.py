@@ -27,6 +27,16 @@ async def _load(s: AsyncSession, message_id: str, user: User) -> tuple[Message, 
     return m, await require_channel(s, m.channel_id, user.id)  # hides messages of inaccessible channels
 
 
+async def _announce_activity(s: AsyncSession, hub, ch: Channel, m: Message) -> None:
+    """Content-free ping so every member's unread badge updates even for channels they have not opened."""
+    ping = {"type": events.CHANNEL_ACTIVITY, "workspace_id": ch.workspace_id, "channel_id": ch.id, "message_id": m.id, "author_id": m.author_id, "reply_to": m.reply_to}
+    if ch.type == "PUBLIC":
+        await hub.publish(events.workspace_room(ch.workspace_id), ping)
+    else:  # never broadcast a private channel's activity to the workspace
+        for uid in await s.scalars(select(ChannelMember.user_id).where(ChannelMember.channel_id == ch.id)):
+            await hub.publish(events.user_room(uid), ping)
+
+
 @router.post("/channels/{channel_id}/messages", status_code=201)
 async def create_message(channel_id: str, body: MessageIn, request: Request, user: User = Depends(current_user), s: AsyncSession = Depends(get_session)):
     ch = await require_channel(s, channel_id, user.id)
@@ -42,6 +52,7 @@ async def create_message(channel_id: str, body: MessageIn, request: Request, use
     hub = request.app.state.hub
     await hub.publish(events.channel_room(channel_id), {"type": events.MESSAGE_CREATED, "message": data})
     metrics.counters["chatspace_messages_created_total"] += 1
+    await _announce_activity(s, hub, ch, m)
 
     notified: set[str] = set()
     if parent and parent.author_id != user.id:
