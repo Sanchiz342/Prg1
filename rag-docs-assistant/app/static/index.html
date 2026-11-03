@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DocuRAG</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="brand">DocuRAG <span class="tag">RAG</span></div>
+    <p class="muted small">Чат по ваших документах з посиланнями на джерела.</p>
+
+    <label class="dropzone" id="dropzone">
+      <input type="file" id="fileInput" multiple accept=".pdf,.md,.markdown,.txt" hidden>
+      <strong>Завантажити файли</strong>
+      <span class="muted small">PDF, Markdown, TXT — перетягніть сюди або натисніть</span>
+    </label>
+    <div id="uploadStatus" class="small"></div>
+
+    <div class="section-title">Документи <span id="docCount" class="muted"></span></div>
+    <p class="muted small">Позначте документи, щоб шукати лише в них.</p>
+    <ul id="docList" class="doc-list"></ul>
+
+    <div class="status small" id="health">…</div>
+  </aside>
+
+  <main class="chat">
+    <div id="messages" class="messages">
+      <div class="empty" id="empty">
+        <h1>Запитайте щось про документи</h1>
+        <p class="muted">Кожне твердження у відповіді має посилання [n] на фрагмент джерела. Якщо відповіді в документах немає, асистент так і скаже.</p>
+        <div class="examples">
+          <button class="example">How long do access tokens last?</button>
+          <button class="example">What happens to my data if I cancel?</button>
+          <button class="example">Як часто створюються резервні копії?</button>
+          <button class="example">What is the capital of France?</button>
+        </div>
+      </div>
+    </div>
+    <form id="askForm" class="ask">
+      <textarea id="question" rows="1" placeholder="Ваше питання…" maxlength="2000" required></textarea>
+      <button type="submit" id="askBtn">Запитати</button>
+    </form>
+  </main>
+
+  <aside class="sources" id="sourcePanel" hidden>
+    <div class="sources-head">
+      <span class="section-title">Джерело</span>
+      <button class="icon" id="closeSource" aria-label="Закрити">✕</button>
+    </div>
+    <div id="sourceBody"></div>
+  </aside>
+</div>
+<script src="/static/app.js"></script>
+</body>
+</html>

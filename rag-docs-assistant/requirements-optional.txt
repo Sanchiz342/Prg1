@@ -1,0 +1,4 @@
+# RAG_PROVIDER=anthropic (Claude API)
+anthropic>=2.4
+# RAG_EMBEDDER=sentence-transformers (neural embeddings; downloads a model on first run)
+sentence-transformers>=3.0
