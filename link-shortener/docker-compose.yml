@@ -1,0 +1,54 @@
+# Two app instances behind nginx, sharing PostgreSQL and Redis.
+#   docker compose up --build          -> dashboard on http://localhost:8080/app/  (API key: snip_demo_key_change_me)
+x-app: &app
+  build: .
+  restart: unless-stopped
+  depends_on:
+    postgres: { condition: service_healthy }
+    redis: { condition: service_healthy }
+  environment:
+    DATABASE_URL: postgres://snip:snip@postgres:5432/snip?sslmode=disable
+    REDIS_URL: redis://redis:6379/0
+    BASE_URL: ${BASE_URL:-http://localhost:8080}
+    TRUST_PROXY: "true"
+    VISITOR_SALT: ${VISITOR_SALT:-change-me-shared-by-all-instances}
+    BOOTSTRAP_API_KEY: ${BOOTSTRAP_API_KEY:-snip_demo_key_change_me}
+    LOG_FORMAT: json
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment: { POSTGRES_USER: snip, POSTGRES_PASSWORD: snip, POSTGRES_DB: snip }
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U snip"]
+      interval: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    # AOF keeps the click stream across Redis restarts.
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
+    volumes: [redisdata:/data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      retries: 20
+
+  app1:
+    <<: *app
+    # Direct access to one instance (bypassing nginx) for load tests with synthetic client IPs. Local only.
+    ports: ["127.0.0.1:8081:8080"]
+
+  app2:
+    <<: *app
+
+  nginx:
+    image: nginx:1.27-alpine
+    depends_on: [app1, app2]
+    ports: ["8080:80"]
+    volumes: ["./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro"]
+
+volumes:
+  pgdata:
+  redisdata:

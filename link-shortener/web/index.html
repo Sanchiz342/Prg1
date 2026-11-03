@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Snip — посилання й аналітика</title>
+<style>
+:root{--bg:#f6f7f9;--panel:#fff;--border:#e3e6eb;--text:#1c2330;--muted:#667085;--accent:#2f6fed;--soft:#e8efff;--bad:#c0362c;--ok:#157f3b;color-scheme:light}
+@media (prefers-color-scheme:dark){:root{--bg:#0d1117;--panel:#151b24;--border:#263040;--text:#e6eaf0;--muted:#8d98aa;--accent:#6c9bff;--soft:#1c2a45;--bad:#ff7b72;--ok:#4cc77b;color-scheme:dark}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+button,input,select{font:inherit;color:inherit}
+header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;padding:14px 20px;background:var(--panel);border-bottom:1px solid var(--border)}
+.brand{font-weight:700;font-size:20px}.brand span{color:var(--accent)}
+main{max-width:1180px;margin:0 auto;padding:20px 16px;display:grid;gap:18px;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr)}
+@media (max-width:920px){main{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:16px}
+h2{font-size:16px;margin:0 0 12px}.muted{color:var(--muted)}.small{font-size:13px}
+input,select{border:1px solid var(--border);background:var(--bg);border-radius:9px;padding:8px 10px;width:100%}
+input:focus,select:focus{outline:2px solid var(--accent);outline-offset:-1px}
+.row{display:grid;gap:8px;grid-template-columns:1fr 1fr auto}.row>*{min-width:0}
+@media (max-width:560px){.row{grid-template-columns:1fr}}
+.btn{border:0;border-radius:9px;padding:8px 14px;background:var(--accent);color:#fff;font-weight:600;cursor:pointer;white-space:nowrap}
+.btn.ghost{background:transparent;color:var(--accent);border:1px solid var(--border)}
+.btn.danger{color:var(--bad)}
+.err{color:var(--bad);font-size:13px;min-height:18px;margin-top:6px}
+table{width:100%;border-collapse:collapse}td,th{padding:8px 6px;border-bottom:1px solid var(--border);text-align:left;vertical-align:middle}
+th{font-size:12px;color:var(--muted);font-weight:600}
+tr.link{cursor:pointer}tr.link:hover td{background:var(--bg)}tr.sel td{background:var(--soft)}
+.code{font-weight:600;font-family:ui-monospace,Menlo,Consolas,monospace}
+.target{max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted);font-size:13px}
+.pill{font-size:12px;border-radius:999px;padding:1px 8px;background:var(--soft);color:var(--accent)}
+.pill.expired,.pill.disabled{background:transparent;border:1px solid var(--border);color:var(--muted)}
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:14px}
+@media (max-width:560px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.kpi{border:1px solid var(--border);border-radius:12px;padding:10px}.kpi b{display:block;font-size:22px}
+.chart{width:100%;height:170px;display:block}
+.chart rect.bar{fill:var(--accent)}.chart rect.bar:hover{opacity:.75}.chart text{fill:var(--muted);font-size:11px}
+.chart line{stroke:var(--border)}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:14px}
+@media (max-width:560px){.grid2{grid-template-columns:1fr}}
+.bars div{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;font-size:13px;margin:5px 0;position:relative;padding:2px 6px}
+.bars div i{position:absolute;inset:0 auto 0 0;background:var(--soft);border-radius:6px;z-index:0}
+.bars div span{position:relative;z-index:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.toolbar{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:12px}
+.toolbar select{width:auto}
+.empty{padding:28px 8px;text-align:center}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">snip<span>.</span> <span class="muted small" style="color:var(--muted);font-weight:400">скорочувач посилань з аналітикою</span></div>
+  <form id="keyForm" style="display:flex;gap:8px;min-width:280px;flex:0 1 420px">
+    <input id="apiKey" type="password" placeholder="API-ключ (snip_…)" autocomplete="off" aria-label="API-ключ">
+    <button class="btn ghost" type="submit">Увійти</button>
+  </form>
+</header>
+
+<main>
+  <section>
+    <div class="card">
+      <h2>Нове посилання</h2>
+      <form id="createForm">
+        <input id="url" type="url" placeholder="https://дуже-довге-посилання.example/…" required>
+        <div class="row" style="margin-top:8px">
+          <input id="alias" placeholder="свій код (необов'язково)" pattern="[A-Za-z0-9][A-Za-z0-9_\-]{2,31}">
+          <select id="ttl" aria-label="Термін дії">
+            <option value="">Без терміну дії</option><option value="3600">1 година</option>
+            <option value="86400">1 день</option><option value="604800">7 днів</option><option value="2592000">30 днів</option>
+          </select>
+          <button class="btn" type="submit">Скоротити</button>
+        </div>
+        <div class="err" id="createErr"></div>
+      </form>
+    </div>
+
+    <div class="card" style="margin-top:18px">
+      <h2>Мої посилання</h2>
+      <table><thead><tr><th>Код</th><th>Куди</th><th>Кліки</th><th>Статус</th></tr></thead><tbody id="links"></tbody></table>
+      <div id="linksEmpty" class="empty muted">Введіть API-ключ, щоб побачити посилання.</div>
+      <button id="more" class="btn ghost" hidden style="margin-top:10px">Показати ще</button>
+    </div>
+  </section>
+
+  <section class="card" id="statsCard">
+    <div class="empty muted" id="statsEmpty">Оберіть посилання, щоб побачити статистику.</div>
+    <div id="stats" hidden>
+      <div class="toolbar">
+        <div><span class="code" id="sCode"></span> <a id="sShort" class="small" target="_blank" rel="noopener"></a></div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <select id="range" aria-label="Період"><option value="7">7 днів</option><option value="30" selected>30 днів</option><option value="90">90 днів</option></select>
+          <button class="btn ghost" id="copy">Копіювати</button>
+          <button class="btn ghost" id="toggle"></button>
+          <button class="btn ghost danger" id="del">Видалити</button>
+        </div>
+      </div>
+      <div class="kpis">
+        <div class="kpi"><span class="muted small">Кліки</span><b id="kClicks">0</b></div>
+        <div class="kpi"><span class="muted small">Унікальні</span><b id="kUnique">0</b></div>
+        <div class="kpi"><span class="muted small">Боти</span><b id="kBots">0</b></div>
+        <div class="kpi"><span class="muted small">Усього (за весь час)</span><b id="kTotal">0</b></div>
+      </div>
+      <svg class="chart" id="chart" role="img" aria-label="Кліки по днях"></svg>
+      <div class="grid2">
+        <div><h2>Країни</h2><div class="bars" id="bCountries"></div></div>
+        <div><h2>Джерела</h2><div class="bars" id="bReferrers"></div></div>
+        <div><h2>Пристрої</h2><div class="bars" id="bDevices"></div></div>
+        <div><h2>Браузери</h2><div class="bars" id="bBrowsers"></div></div>
+      </div>
+      <p class="muted small" id="sNote"></p>
+    </div>
+  </section>
+</main>
+
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+let key = ""; try { key = sessionStorage.getItem("snip-key") || ""; } catch {}
+let cursor = null, selected = null;
+const regionNames = (() => { try { return new Intl.DisplayNames(["uk"], { type: "region" }); } catch { return null; } })();
+const DEVICE = { desktop: "Комп'ютер", mobile: "Телефон", tablet: "Планшет", other: "Інше", bot: "Бот" };
+
+async function api(path, opts = {}) {
+  const res = await fetch(path, { ...opts, headers: { "Authorization": "Bearer " + key, "Content-Type": "application/json", ...(opts.headers || {}) } });
+  if (res.status === 204) return null;
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error ? body.error.message : "HTTP " + res.status);
+  return body;
+}
+
+function countryLabel(cc) {
+  if (cc === "ZZ") return "Невідомо";
+  const flag = String.fromCodePoint(...[...cc].map((c) => 0x1f1a5 + c.charCodeAt(0)));
+  return flag + " " + (regionNames ? regionNames.of(cc) : cc);
+}
+
+async function loadLinks(reset = true) {
+  if (!key) return;
+  if (reset) { cursor = null; $("links").innerHTML = ""; }
+  try {
+    const data = await api("/api/links?limit=20" + (cursor ? "&cursor=" + cursor : ""));
+    for (const l of data.items) {
+      const tr = document.createElement("tr");
+      tr.className = "link" + (selected === l.code ? " sel" : "");
+      tr.dataset.code = l.code;
+      tr.innerHTML = `<td class="code">${esc(l.code)}</td><td><div class="target" title="${esc(l.url)}">${esc(l.url)}</div></td>
+        <td>${l.clicks}</td><td><span class="pill ${l.status}">${{active:"активне",expired:"прострочене",disabled:"вимкнене"}[l.status]}</span></td>`;
+      tr.addEventListener("click", () => selectLink(l.code));
+      $("links").appendChild(tr);
+    }
+    cursor = data.next_cursor;
+    $("more").hidden = !cursor;
+    $("linksEmpty").hidden = $("links").children.length > 0;
+    $("linksEmpty").textContent = "Посилань ще немає — створіть перше.";
+  } catch (e) {
+    $("linksEmpty").hidden = false;
+    $("linksEmpty").textContent = "Помилка: " + e.message;
+  }
+}
+
+function bars(el, items, label = (k) => k) {
+  const max = Math.max(1, ...items.map((i) => i.clicks));
+  el.innerHTML = items.length ? items.map((i) =>
+    `<div><i style="width:${(i.clicks / max) * 100}%"></i><span>${esc(label(i.key))}</span><span>${i.clicks}</span></div>`).join("")
+    : `<span class="muted small">немає даних</span>`;
+}
+
+function chart(points) {
+  const svg = $("chart"), W = svg.clientWidth || 600, H = 170, pad = 22;
+  const max = Math.max(1, ...points.map((p) => p.clicks));
+  const bw = (W - pad) / points.length;
+  let out = `<line x1="${pad}" x2="${W}" y1="${H - pad}" y2="${H - pad}"/><text x="0" y="12">${max}</text><text x="0" y="${H - pad}">0</text>`;
+  points.forEach((p, i) => {
+    const h = (p.clicks / max) * (H - pad - 10);
+    out += `<rect class="bar" x="${pad + i * bw + 1}" y="${H - pad - h}" width="${Math.max(1, bw - 2)}" height="${h}" rx="2"><title>${p.date}: ${p.clicks} кліків, ${p.unique} унікальних</title></rect>`;
+  });
+  const step = Math.ceil(points.length / 6);
+  points.forEach((p, i) => { if (i % step === 0) out += `<text x="${pad + i * bw}" y="${H - 6}">${p.date.slice(5)}</text>`; });
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.innerHTML = out;
+}
+
+async function selectLink(code) {
+  selected = code;
+  document.querySelectorAll("tr.link").forEach((tr) => tr.classList.toggle("sel", tr.dataset.code === code));
+  const days = +$("range").value;
+  const to = new Date(), from = new Date(Date.now() - (days - 1) * 864e5);
+  const fmt = (d) => d.toISOString().slice(0, 10);
+  try {
+    const [link, data] = await Promise.all([api("/api/links/" + code), api(`/api/links/${code}/stats?from=${fmt(from)}&to=${fmt(to)}`)]);
+    const s = data.stats;
+    $("statsEmpty").hidden = true; $("stats").hidden = false;
+    $("sCode").textContent = code;
+    $("sShort").textContent = link.short_url; $("sShort").href = link.short_url;
+    $("kClicks").textContent = s.clicks; $("kUnique").textContent = s.unique_visitors;
+    $("kBots").textContent = s.bot_clicks; $("kTotal").textContent = data.total_clicks;
+    $("toggle").textContent = link.status === "disabled" ? "Увімкнути" : "Вимкнути";
+    $("toggle").onclick = async () => { await api("/api/links/" + code, { method: "PATCH", body: JSON.stringify({ disabled: link.status !== "disabled" }) }); loadLinks(); selectLink(code); };
+    $("del").onclick = async () => { if (!confirm(`Видалити ${code} разом зі статистикою?`)) return; await api("/api/links/" + code, { method: "DELETE" }); selected = null; $("stats").hidden = true; $("statsEmpty").hidden = false; loadLinks(); };
+    $("copy").onclick = () => navigator.clipboard && navigator.clipboard.writeText(link.short_url);
+    chart(s.timeseries);
+    bars($("bCountries"), s.countries, countryLabel);
+    bars($("bReferrers"), s.referrers, (k) => k || "Прямі переходи");
+    bars($("bDevices"), s.devices, (k) => DEVICE[k] || k);
+    bars($("bBrowsers"), s.browsers);
+    $("sNote").textContent = `${data.from} — ${data.to} (UTC). Унікальні відвідувачі рахуються по днях; боти не входять у кліки.`;
+  } catch (e) { alert(e.message); }
+}
+
+$("keyForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  key = $("apiKey").value.trim();
+  try { sessionStorage.setItem("snip-key", key); } catch {}
+  loadLinks();
+});
+$("createForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  $("createErr").textContent = "";
+  const body = { url: $("url").value.trim() };
+  if ($("alias").value.trim()) body.alias = $("alias").value.trim();
+  if ($("ttl").value) body.expires_in = +$("ttl").value;
+  try {
+    const l = await api("/api/links", { method: "POST", body: JSON.stringify(body) });
+    $("url").value = ""; $("alias").value = "";
+    await loadLinks();
+    selectLink(l.code);
+  } catch (err) { $("createErr").textContent = err.message; }
+});
+$("more").addEventListener("click", () => loadLinks(false));
+$("range").addEventListener("change", () => selected && selectLink(selected));
+if (key) { $("apiKey").value = key; loadLinks(); }
+</script>
+</body>
+</html>

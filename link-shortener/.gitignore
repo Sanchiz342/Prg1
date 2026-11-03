@@ -1,0 +1,5 @@
+/snip
+/loadgen
+*.test
+*.out
+.env
