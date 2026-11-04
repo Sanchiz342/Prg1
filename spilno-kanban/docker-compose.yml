@@ -1,0 +1,11 @@
+services:
+  spilno:
+    build: .
+    ports: ["8787:8787"]
+    environment:
+      # Restrict WebSocket origins in production, e.g. ALLOWED_ORIGINS=https://boards.example.com
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
+    volumes: ["spilno-data:/data"]
+    restart: unless-stopped
+volumes:
+  spilno-data:

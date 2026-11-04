@@ -1,0 +1,24 @@
+{
+  "name": "spilno-kanban",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "server",
+    "web"
+  ],
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "dev": "npm run dev -w server & npm run dev -w web",
+    "build": "npm run build -w web && npm run build -w server",
+    "start": "npm run start -w server",
+    "typecheck": "npm run typecheck -w server && npm run typecheck -w web",
+    "test": "npm test -w server && npm test -w web",
+    "test:e2e": "npm run build && playwright test",
+    "bench": "tsx server/bench/bench.ts"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0"
+  }
+}
