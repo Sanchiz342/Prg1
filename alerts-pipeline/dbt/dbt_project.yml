@@ -1,0 +1,43 @@
+name: alerts
+version: "1.0.0"
+config-version: 2
+profile: alerts
+
+flags:
+  send_anonymous_usage_stats: false
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
+
+vars:
+  timezone: "Europe/Kyiv"
+  # Alerts longer than this are flagged, not removed. The data does not say why an alert is that long (the
+  # longest official ones are hromada-level alerts in front-line areas, e.g. Lypetska and Vovchanska; in the
+  # volunteer data an unreported end is also possible). Flag and show them; do not guess.
+  long_alert_hours: 168
+  # Incremental fact table: re-process this many days back on every run to absorb upstream corrections.
+  incremental_lookback_days: 7
+  # The calendar starts on the first day of the full-scale invasion.
+  calendar_start: "2022-02-24"
+
+models:
+  alerts:
+    staging:
+      +materialized: view
+    intermediate:
+      +materialized: table
+    marts:
+      +materialized: table
+
+seeds:
+  alerts:
+    regions:
+      +column_types:
+        region: varchar
+        name_uk: varchar
+        iso_code: varchar
+        shape_name: varchar
+        in_dataset: boolean
+        note: varchar

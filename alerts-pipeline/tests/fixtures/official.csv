@@ -1,0 +1,11 @@
+oblast,raion,hromada,level,started_at,finished_at,source
+Kyiv City,,,oblast,2024-03-30 22:30:00+00:00,2024-03-31 02:30:00+00:00,official
+Kyiv City,,,oblast,2024-03-30 22:30:00+00:00,2024-03-31 02:30:00+00:00,official
+Kharkivska oblast,Kharkivskyi raion,,raion,2024-01-10 10:00:00+00:00,2024-01-10 11:00:00+00:00,official
+Kharkivska oblast,Kharkivskyi raion,Lypetska terytorialna hromada,hromada,2024-01-10 10:30:00+00:00,2024-01-10 12:00:00+00:00,official
+Kharkivska oblast,Chuhuivskyi raion,,raion,2024-01-10 10:30:00+00:00,2024-01-10 12:00:00+00:00,official
+Kharkivska oblast,Iziumskyi raion,,raion,2024-01-10 11:59:00+00:00,2024-01-10 12:00:00+00:00,official
+Kharkivska oblast,,,oblast,2024-01-10 21:00:00+00:00,2024-01-11 01:00:00+00:00,official
+Kharkivska oblast,,,oblast,not a date,2024-01-12 01:00:00+00:00,official
+Kharkivska oblast,,,oblast,2024-01-12 05:00:00+00:00,2024-01-12 04:00:00+00:00,official
+Lvivska oblast,,,oblast,2024-02-01 08:00:00+00:00,2024-02-09 09:00:00+00:00,official

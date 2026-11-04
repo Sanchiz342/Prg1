@@ -1,0 +1,8 @@
+alerts:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      # The pipeline always sets ALERTS_WAREHOUSE to an absolute path.
+      path: "{{ env_var('ALERTS_WAREHOUSE', '../data/warehouse.duckdb') }}"
+      threads: 4

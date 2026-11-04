@@ -1,0 +1,17 @@
+# Example: run the pipeline every morning and publish the dashboard with GitHub Pages.
+# Not active here (workflows live in the repository-wide .github/ folder); copy it there to use it.
+name: alerts-pipeline
+on:
+  schedule: [{ cron: "17 6 * * *" }]
+  workflow_dispatch:
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: alerts-pipeline } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.13" }
+      - run: make setup && make test && make run
+      - uses: actions/upload-pages-artifact@v3
+        with: { path: alerts-pipeline/dashboard }

@@ -1,0 +1,76 @@
+version: 2
+
+seeds:
+  - name: regions
+    description: Region name mapping built and verified by scripts/build_region_seed.py.
+    columns:
+      - name: iso_code
+        data_tests: [unique, not_null]
+      - name: name_uk
+        data_tests: [unique, not_null]
+
+models:
+  - name: stg_official_alerts
+    columns:
+      - name: alert_id
+        data_tests: [unique, not_null]
+      - name: level
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["oblast", "raion", "hromada"]
+      - name: oblast
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('regions')
+                field: region
+
+  - name: stg_volunteer_alerts
+    columns:
+      - name: alert_id
+        data_tests: [unique, not_null]
+      - name: oblast
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('regions')
+                field: region
+
+  - name: int_alert_episodes
+    description: Merged, non-overlapping alert periods per metric and oblast.
+    columns:
+      - name: metric
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["official_any", "official_oblastwide", "volunteer"]
+
+  - name: fct_alerts
+    columns:
+      - name: alert_id
+        data_tests: [unique, not_null]
+      - name: iso_code
+        data_tests: [not_null]
+
+  - name: agg_region_daily
+    data_tests:
+      - dbt_utils_free_unique_combination:
+          arguments:
+            columns: ["iso_code", "day"]
+    columns:
+      - name: any_alert_hours
+        description: Hours when at least part of the oblast (any level) was under an official alert.
+      - name: oblastwide_alert_hours
+        description: Hours when the whole oblast was under an official oblast-level alert.
+      - name: volunteer_alert_hours
+        description: Hours under alert according to volunteer (eTryvoga) records, oblast level.
+
+  - name: rpt_data_quality
+    columns:
+      - name: severity
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["info", "warn"]

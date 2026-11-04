@@ -1,0 +1,21 @@
+version: 2
+
+sources:
+  - name: raw
+    description: >
+      Raw CSVs from github.com/Vadimkin/ukrainian-air-raid-sirens-dataset (MIT, Vadym Klymenko), loaded as text
+      by pipeline/load.py. All timestamps are UTC.
+    schema: raw
+    config:
+      # Freshness = age of the newest alert in the data, not of the load: a re-downloaded stale file is still stale.
+      loaded_at_field: "cast(started_at as timestamptz)"
+      freshness:
+        warn_after: { count: 2, period: day }
+        error_after: { count: 14, period: day }
+    tables:
+      - name: official_alerts
+        description: Official alerts (from 2022-03-15), at oblast, raion and hromada level.
+      - name: volunteer_alerts
+        description: >
+          Alerts collected by volunteers from the eTryvoga channel (from 2022-02-25), oblast level only.
+          `naive = True` means the end of the alert was not reported and was set to start + 30 minutes.

@@ -1,0 +1,4 @@
+region,started_at,finished_at,naive
+Kyiv City,2024-01-10 10:00:00+00:00,2024-01-10 10:30:00+00:00,True
+Kyiv City,2024-01-10 10:20:00+00:00,2024-01-10 11:00:00+00:00,False
+Kharkivska oblast,2024-01-11 06:00:00+00:00,2024-01-11 06:45:00+00:00,False

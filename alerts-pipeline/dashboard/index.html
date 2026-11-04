@@ -1,0 +1,532 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Повітряні тривоги в Україні — час під тривогою за регіонами</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  color-scheme: light;
+  --page: #f4f5f2; --surface-1: #fcfcfb; --surface-2: #f0efec; --line: #dedcd6;
+  --text-primary: #0b0b0b; --text-secondary: #52514e; --text-muted: #7a7974;
+  --series-1: #2a78d6; --series-2: #eb6834;
+  --seq-0: #cde2fb; --seq-1: #9ec5f4; --seq-2: #6da7ec; --seq-3: #3987e5; --seq-4: #256abf; --seq-5: #184f95; --seq-6: #0d366b;
+  --nodata: #e4e2dc; --hatch: #a9a79f; --focus: #2a78d6;
+  --good: #0ca30c; --warning: #fab219; --critical: #d03b3b;
+  --sans: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --mono: 'IBM Plex Mono', ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --page: #121211; --surface-1: #1a1a19; --surface-2: #232321; --line: #34342f;
+    --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #918f86;
+    --series-1: #3987e5; --series-2: #d95926;
+    /* Dark: near-zero recedes into the dark surface, high values climb toward light. */
+    --seq-0: #13355f; --seq-1: #184f95; --seq-2: #1c5cab; --seq-3: #2a78d6; --seq-4: #5598e7; --seq-5: #86b6ef; --seq-6: #cde2fb;
+    --nodata: #2a2a27; --hatch: #5b5a54; --focus: #3987e5;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--text-primary); font: 15px/1.5 var(--sans); }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.wrap { max-width: 1240px; margin: 0 auto; padding: 28px 20px 60px; }
+header h1 { font-size: clamp(24px, 3.4vw, 34px); line-height: 1.15; margin: 0 0 8px; letter-spacing: -0.015em; }
+.lede { color: var(--text-secondary); max-width: 64em; margin: 0 0 14px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; background: var(--surface-1); border: 1px solid var(--line); border-radius: 99px; padding: 3px 10px; }
+.chip .ic { font-weight: 700; }
+.chip.ok .ic { color: var(--good); } .chip.stale .ic { color: var(--critical); }
+
+.controls { display: flex; flex-wrap: wrap; gap: 16px 24px; align-items: end; margin: 24px 0 16px; padding: 14px 16px; background: var(--surface-1); border: 1px solid var(--line); border-radius: 12px; }
+.control { display: grid; gap: 6px; }
+.control > span { font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; flex-wrap: wrap; }
+.seg button { border: 0; background: transparent; color: var(--text-secondary); padding: 7px 12px; font: 500 14px var(--sans); cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--text-primary); color: var(--surface-1); }
+select { font: 14px var(--sans); color: var(--text-primary); background: var(--surface-1); border: 1px solid var(--line); border-radius: 9px; padding: 7px 10px; min-width: 210px; }
+.metric-note { flex-basis: 100%; margin: 0; font-size: 13.5px; color: var(--text-secondary); }
+.metric-note b { color: var(--text-primary); }
+
+.grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 16px; }
+@media (max-width: 960px) { .grid { grid-template-columns: 1fr; } }
+.card { background: var(--surface-1); border: 1px solid var(--line); border-radius: 12px; padding: 16px; min-width: 0; }
+.card h2 { font-size: 16px; margin: 0 0 4px; }
+.card .sub { font-size: 13px; color: var(--text-muted); margin: 0 0 12px; }
+.card-head { display: flex; justify-content: space-between; gap: 12px; align-items: start; }
+.linkbtn { border: 1px solid var(--line); background: transparent; color: var(--text-secondary); border-radius: 8px; padding: 4px 10px; font: 13px var(--sans); cursor: pointer; white-space: nowrap; }
+
+#map svg { width: 100%; height: auto; display: block; }
+#map path.region { stroke: var(--surface-1); stroke-width: 1.2; cursor: pointer; transition: opacity 0.15s; }
+#map path.region:hover { stroke: var(--text-primary); stroke-width: 1.6; }
+#map path.region.selected { stroke: var(--text-primary); stroke-width: 2.4; }
+#map path.region:focus-visible { outline: none; stroke: var(--focus); stroke-width: 3; }
+.legend { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 12.5px; color: var(--text-secondary); margin-top: 8px; }
+.legend .ramp { display: inline-flex; gap: 2px; }
+.legend .ramp span { width: 34px; height: 10px; border-radius: 2px; }
+.legend .ticks { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 11px; color: var(--text-muted); }
+.swatch-hatch { display: inline-block; width: 16px; height: 10px; border-radius: 2px; vertical-align: -1px; background: repeating-linear-gradient(45deg, var(--hatch) 0 2px, var(--nodata) 2px 5px); }
+
+.kpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
+.kpi { background: var(--surface-2); border-radius: 10px; padding: 10px 12px; }
+.kpi b { display: block; font: 600 24px/1.1 var(--sans); font-variant-numeric: tabular-nums; }
+.kpi span { font-size: 12.5px; color: var(--text-secondary); }
+
+.chart svg { width: 100%; display: block; overflow: visible; }
+.chart text { fill: var(--text-muted); font: 11px var(--mono); }
+.chart .grid-line { stroke: var(--line); stroke-width: 1; }
+.chart .axis { stroke: var(--text-muted); stroke-width: 1; }
+.chart rect.bar { fill: var(--seq-3); }
+.chart rect.bar.partial { fill: var(--seq-1); }
+.chart rect.hit { fill: transparent; cursor: crosshair; }
+.chart .marker-line { stroke: var(--text-muted); stroke-dasharray: 3 3; }
+.chart .marker-text { fill: var(--text-secondary); font: 11px var(--sans); }
+.chart path.s1 { stroke: var(--series-1); } .chart path.s2 { stroke: var(--series-2); }
+.chart path.series { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.chart .label-s1 { fill: var(--text-primary); font: 600 12px var(--sans); }
+.chart line.crosshair { stroke: var(--text-muted); stroke-width: 1; }
+.chart circle.dot { stroke: var(--surface-1); stroke-width: 2; }
+.series-legend { display: flex; gap: 16px; font-size: 13px; color: var(--text-secondary); margin: 0 0 8px; flex-wrap: wrap; }
+.series-legend i { display: inline-block; width: 14px; height: 3px; border-radius: 2px; vertical-align: 4px; margin-right: 6px; }
+
+.heat { display: grid; grid-template-columns: 26px repeat(24, minmax(0, 1fr)); gap: 2px; font: 11px var(--mono); color: var(--text-muted); }
+.heat .cell { aspect-ratio: 1; border-radius: 3px; min-height: 10px; }
+.heat .rowlab { align-self: center; }
+.heat .collab { text-align: center; }
+
+table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+th { text-align: left; font-weight: 600; color: var(--text-muted); font-size: 12px; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+td { padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; font-family: var(--mono); }
+.table-wrap { overflow-x: auto; }
+
+.quality li { margin: 6px 0; }
+.quality .sev { font-weight: 700; margin-right: 4px; }
+.sev-warn { color: #b47a00; } .sev-info { color: var(--text-muted); } .sev-error { color: var(--critical); }
+@media (prefers-color-scheme: dark) { :root:where(:not([data-theme="light"])) .sev-warn { color: var(--warning); } }
+.method p { margin: 6px 0; font-size: 14px; color: var(--text-secondary); }
+footer { margin-top: 28px; font-size: 13px; color: var(--text-muted); }
+footer a, .method a { color: inherit; }
+
+#tip { position: fixed; pointer-events: none; z-index: 10; background: var(--text-primary); color: var(--surface-1); font-size: 12.5px; line-height: 1.4; padding: 8px 10px; border-radius: 8px; max-width: 260px; opacity: 0; transition: opacity 0.08s; }
+#tip.on { opacity: 1; }
+#tip b { display: block; font-size: 13px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <rect width="6" height="6" fill="var(--nodata)"/><rect width="2" height="6" fill="var(--hatch)"/>
+    </pattern>
+  </defs>
+</svg>
+<div class="wrap">
+  <header>
+    <h1>Скільки годин на добу регіони України проводять під повітряною тривогою</h1>
+    <p class="lede" id="lede">Завантаження даних…</p>
+    <div class="chips" id="chips"></div>
+  </header>
+
+  <section class="controls" aria-label="Фільтри">
+    <div class="control">
+      <span id="metric-label">Що рахуємо</span>
+      <div class="seg" role="group" aria-labelledby="metric-label" id="metric"></div>
+    </div>
+    <label class="control"><span>Період</span><select id="period"></select></label>
+    <label class="control"><span>Регіон</span><select id="region"></select></label>
+    <p class="metric-note" id="metric-note"></p>
+  </section>
+
+  <div class="grid">
+    <section class="card" aria-labelledby="map-title">
+      <div class="card-head">
+        <div><h2 id="map-title">Середня кількість годин під тривогою на добу</h2><p class="sub" id="map-sub"></p></div>
+        <button class="linkbtn" id="toggle-table" aria-expanded="false">Таблиця</button>
+      </div>
+      <div id="map"></div>
+      <div class="legend" id="legend"></div>
+      <div class="table-wrap" id="map-table" hidden></div>
+    </section>
+
+    <section class="card" aria-labelledby="sel-title">
+      <h2 id="sel-title">Україна</h2>
+      <p class="sub" id="sel-sub"></p>
+      <div class="kpis" id="kpis"></div>
+      <h2>По місяцях, год/добу</h2>
+      <p class="sub">Світліші стовпці — місяці, які джерело покриває не повністю.</p>
+      <div class="chart" id="bars"></div>
+    </section>
+  </div>
+
+  <div class="grid" style="margin-top:16px">
+    <section class="card" aria-labelledby="cmp-title">
+      <h2 id="cmp-title">Два джерела, одна область: тривога на всю область</h2>
+      <p class="sub">Офіційні тривоги рівня області проти волонтерських записів, год/добу по місяцях.</p>
+      <div class="series-legend" id="cmp-legend"></div>
+      <div class="chart" id="compare"></div>
+    </section>
+    <section class="card" aria-labelledby="heat-title">
+      <h2 id="heat-title">Коли починаються тривоги</h2>
+      <p class="sub" id="heat-sub">Кількість епізодів за годиною початку (київський час) і днем тижня.</p>
+      <div id="heat"></div>
+    </section>
+  </div>
+
+  <div class="grid" style="margin-top:16px">
+    <section class="card" aria-labelledby="long-title">
+      <h2 id="long-title">Найдовші безперервні тривоги</h2>
+      <p class="sub" id="long-sub"></p>
+      <div class="table-wrap" id="longest"></div>
+    </section>
+    <section class="card quality method" aria-labelledby="q-title">
+      <h2 id="q-title">Про дані</h2>
+      <div id="method"></div>
+      <h2 style="margin-top:14px">Перевірки якості</h2>
+      <ul id="quality" style="padding-left:18px;margin:6px 0"></ul>
+    </section>
+  </div>
+
+  <footer id="footer"></footer>
+</div>
+<div id="tip" role="tooltip"></div>
+
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const nf1 = new Intl.NumberFormat('uk-UA', { maximumFractionDigits: 1, minimumFractionDigits: 1 });
+const nf0 = new Intl.NumberFormat('uk-UA', { maximumFractionDigits: 0 });
+const fmt1 = (v) => (v == null || !isFinite(v) ? '—' : nf1.format(v));
+const MONTHS = ['січ', 'лют', 'бер', 'кві', 'тра', 'чер', 'лип', 'сер', 'вер', 'жов', 'лис', 'гру'];
+const DAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Нд'];
+const SVG = 'http://www.w3.org/2000/svg';
+const el = (tag, attrs = {}, parent) => {
+  const n = document.createElementNS(SVG, tag);
+  for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
+  if (parent) parent.appendChild(n);
+  return n;
+};
+
+// Luhansk has records only until a permanent alert started there (dataset README): its low values would mislead.
+const PERMANENT = { 'UA-09': 'За README датасету в Луганській області діє постійна тривога, яка не входить у записи.' };
+
+const METRICS = {
+  volunteer: { label: 'Волонтерські дані', col: 3, days: 7, ep: 5, longKey: 'volunteer', heatKey: 'volunteer',
+    note: '<b>Волонтерські записи каналу eTryvoga</b>, рівень області. Одне визначення на весь період і найсвіжіші дані; близько 5% тривог мають оцінений кінець (початок + 30 хв).' },
+  any: { label: 'Хоча б частина області', col: 1, days: 6, ep: 4, longKey: 'official_any', heatKey: 'official_any',
+    note: '<b>Офіційні тривоги будь-якого рівня</b>: хоча б частина області (район чи громада) під тривогою. Тривалі місцеві тривоги біля фронту можуть займати майже всю добу.' },
+  oblastwide: { label: 'Уся область', col: 2, days: 6, ep: null, longKey: 'official_oblastwide', heatKey: null,
+    note: '<b>Офіційні тривоги на всю область.</b> З грудня 2025 тривоги оголошують переважно по районах, тож падіння після цього — зміна правил, а не менше тривог.' },
+};
+
+const state = { metric: 'volunteer', period: 'all', region: 'UA' };
+let D, regionsByIso, datasetIsos;
+
+fetch('data.json').then((r) => r.json()).then((data) => {
+  D = data;
+  regionsByIso = Object.fromEntries(D.regions.map((r) => [r.iso, r]));
+  datasetIsos = D.regions.filter((r) => r.inDataset).map((r) => r.iso);
+  setupControls();
+  renderStatic();
+  render();
+}).catch((e) => { $('lede').textContent = 'Не вдалося завантажити data.json: ' + e.message; });
+
+/* ---------- aggregation ---------- */
+function rowsFor(iso) {
+  const isos = iso === 'UA' ? datasetIsos.filter((i) => !PERMANENT[i]) : [iso];
+  const byMonth = new Map();
+  for (const i of isos) for (const row of D.monthly[i] || []) {
+    if (state.period !== 'all' && !row[0].startsWith(state.period)) continue;
+    const acc = byMonth.get(row[0]) || [row[0], 0, 0, 0, 0, 0, 0, 0, 0];
+    for (let k = 1; k < 9; k++) acc[k] += row[k] || 0;
+    byMonth.set(row[0], acc);
+  }
+  return [...byMonth.values()].sort((a, b) => a[0].localeCompare(b[0]));
+}
+function summary(iso, metricKey = state.metric) {
+  const m = METRICS[metricKey];
+  const rows = rowsFor(iso);
+  let hours = 0, days = 0, ep = 0;
+  for (const r of rows) { hours += r[m.col]; days += r[m.days]; ep += m.ep ? r[m.ep] : 0; }
+  return { hours, days, perDay: days ? hours / days : null, episodes: m.ep ? ep : null, rows };
+}
+
+/* ---------- controls ---------- */
+function setupControls() {
+  for (const [key, m] of Object.entries(METRICS)) {
+    const b = document.createElement('button');
+    b.textContent = m.label; b.dataset.key = key;
+    b.addEventListener('click', () => { state.metric = key; render(); });
+    $('metric').appendChild(b);
+  }
+  const years = [...new Set(Object.values(D.monthly).flat().map((r) => r[0].slice(0, 4)))].sort();
+  $('period').innerHTML = '<option value="all">Увесь період</option>' + years.map((y) => `<option value="${y}">${y}</option>`).join('');
+  $('period').addEventListener('change', (e) => { state.period = e.target.value; render(); });
+  const opts = D.regions.filter((r) => r.inDataset).sort((a, b) => a.name.localeCompare(b.name, 'uk'));
+  $('region').innerHTML = '<option value="UA">Уся Україна (середнє по регіонах)</option>' +
+    opts.map((r) => `<option value="${r.iso}">${r.name}</option>`).join('');
+  $('region').addEventListener('change', (e) => { state.region = e.target.value; render(); });
+  $('toggle-table').addEventListener('click', (e) => {
+    const t = $('map-table'); t.hidden = !t.hidden; e.target.setAttribute('aria-expanded', String(!t.hidden));
+    e.target.textContent = t.hidden ? 'Таблиця' : 'Сховати таблицю';
+  });
+}
+
+function renderStatic() {
+  const c = D.meta.coverage;
+  $('lede').textContent = `Відкриті дані про повітряні тривоги з ${c.volunteer?.first_day ?? '?'} до ${c.volunteer?.last_day ?? '?'}: ` +
+    `${nf0.format(c.official?.alerts ?? 0)} офіційних і ${nf0.format(c.volunteer?.alerts ?? 0)} волонтерських записів після очищення. ` +
+    'Одночасні тривоги в кількох районах однієї області рахуються один раз.';
+  const fresh = D.meta.freshness || [];
+  $('chips').innerHTML = fresh.map((f) => {
+    const name = f.source.startsWith('official') ? 'Офіційні' : 'Волонтерські';
+    const ok = f.status === 'pass';
+    const last = f.source.startsWith('official') ? c.official?.last_day : c.volunteer?.last_day;
+    return `<span class="chip ${ok ? 'ok' : 'stale'}"><span class="ic" aria-hidden="true">${ok ? '✓' : '!'}</span>` +
+      `${name}: ${ok ? 'свіжі' : 'застарілі'}, останній запис ${last} (${nf1.format(f.age_days)} дн. тому)</span>`;
+  }).join('') + (D.meta.dbt ? `<span class="chip"><span class="ic" aria-hidden="true">✓</span>dbt: ${D.meta.dbt.passed} перевірок пройдено, ${D.meta.dbt.warned} попередж.</span>` : '');
+
+  $('method').innerHTML = `
+    <p><b>Епізод</b> — безперервний проміжок, коли в області була хоча б одна тривога: перетини й стики об’єднано. Доба — за київським часом, з переходами на літній час.</p>
+    <p><b>Год/добу</b> — сума годин, поділена на кількість днів, які джерело покриває. Дні без покриття не рахуються нулями.</p>
+    <p>Крим і Севастополь у датасеті відсутні; для Луганщини постійна тривога не записана — усі три заштриховані. «Уся Україна» — середнє по 24 регіонах із записами.</p>
+    <p>Джерела: <a href="https://github.com/Vadimkin/ukrainian-air-raid-sirens-dataset">ukrainian-air-raid-sirens-dataset</a> (MIT, Vadym Klymenko; волонтерські дані — канал eTryvoga); межі областей — <a href="https://www.geoboundaries.org">geoBoundaries</a> (ODbL, © OpenStreetMap contributors).</p>`;
+
+  const sevIcon = { warn: '!', info: 'i', error: '×' };
+  const label = { raw_rows: 'рядків у файлі', exact_duplicates_removed: 'точних дублікатів прибрано', unparseable_timestamps: 'рядків з нерозпізнаним часом',
+    ends_before_start: 'рядків, де кінець раніше початку', estimated_end_share: '% тривог з оціненим кінцем', long_alerts: 'тривог довших за 7 діб (залишено)',
+    days_since_newest_record: 'днів від останнього запису', unmapped_regions: 'регіонів без відповідності на карті' };
+  const srcName = { official: 'Офіційні', volunteer: 'Волонтерські', both: 'Обидва' };
+  $('quality').innerHTML = D.meta.quality.filter((q) => label[q.check]).map((q) =>
+    `<li><span class="sev sev-${q.severity}" aria-label="${q.severity}">${sevIcon[q.severity] || ''}</span>${srcName[q.source]}: <b>${q.check === 'estimated_end_share' ? nf1.format(q.value) : nf0.format(q.value)}</b> ${label[q.check]}</li>`).join('');
+  $('footer').textContent = `Дані згенеровано ${new Date(D.meta.generated_at).toLocaleString('uk-UA')} конвеєром alerts-pipeline (DuckDB + dbt).`;
+}
+
+/* ---------- main render ---------- */
+function render() {
+  for (const b of $('metric').children) b.setAttribute('aria-pressed', String(b.dataset.key === state.metric));
+  $('metric-note').innerHTML = METRICS[state.metric].note;
+  $('period').value = state.period; $('region').value = state.region;
+  renderMap(); renderSelection(); renderCompare(); renderHeat(); renderLongest();
+}
+
+const RAMP = ['--seq-0', '--seq-1', '--seq-2', '--seq-3', '--seq-4', '--seq-5', '--seq-6'];
+/** Round step (1, 2, 2.5 or 5 × 10^k) so that `ticks` steps cover v. */
+function niceStep(v, ticks = 4) {
+  const raw = Math.max(v, 1e-9) / ticks, p = 10 ** Math.floor(Math.log10(raw));
+  return [1, 2, 2.5, 5, 10].map((m) => m * p).find((s) => s >= raw);
+}
+function niceMax(v, ticks = 4) { return niceStep(v, ticks) * ticks; }
+
+function renderMap() {
+  const values = {};
+  for (const iso of datasetIsos) if (!PERMANENT[iso]) values[iso] = summary(iso).perDay;
+  const max = niceMax(Math.max(0, ...Object.values(values).filter((v) => v != null)), RAMP.length);
+  const step = max / RAMP.length;
+  const bin = (v) => Math.min(RAMP.length - 1, Math.floor(v / step));
+  const svg = el('svg', { viewBox: `0 0 ${D.map.width} ${D.map.height}`, role: 'img', 'aria-labelledby': 'map-title' });
+  for (const r of D.regions) {
+    const v = values[r.iso];
+    const hatch = !r.inDataset || PERMANENT[r.iso];
+    const p = el('path', { d: r.path, class: 'region' + (r.iso === state.region ? ' selected' : ''),
+      fill: hatch ? 'url(#hatch)' : v == null ? 'var(--nodata)' : `var(${RAMP[bin(v)]})` }, svg);
+    if (r.inDataset) { p.setAttribute('tabindex', '0'); p.setAttribute('role', 'button'); }
+    p.setAttribute('aria-label', `${r.name}: ${hatch ? 'немає даних' : fmt1(v) + ' год на добу'}`);
+    const tipHtml = () => {
+      if (hatch) return `<b>${r.name}</b>${PERMANENT[r.iso] || (r.note.startsWith('permanent') ? 'Постійна тривога; у датасеті відсутня.' : 'Немає в датасеті.')}`;
+      const s = summary(r.iso);
+      return `<b>${r.name}</b>${fmt1(s.perDay)} год/добу · ${nf0.format(s.hours)} год за ${nf0.format(s.days)} дн.` +
+        (s.episodes != null ? `<br>${nf0.format(s.episodes)} епізодів` : '');
+    };
+    p.addEventListener('mousemove', (e) => showTip(e, tipHtml()));
+    p.addEventListener('mouseleave', hideTip);
+    const select = () => { if (r.inDataset) { state.region = state.region === r.iso ? 'UA' : r.iso; render(); } };
+    p.addEventListener('click', select);
+    p.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); select(); } });
+  }
+  $('map').replaceChildren(svg);
+  $('map-sub').textContent = `${METRICS[state.metric].label} · ${state.period === 'all' ? 'увесь період' : state.period + ' рік'}. Натисніть на область, щоб вибрати її.`;
+  const ticks = RAMP.map((_, i) => fmt1(i * step)).concat(fmt1(max));
+  $('legend').innerHTML = `<div><div class="ramp">${RAMP.map((c) => `<span style="background:var(${c})"></span>`).join('')}</div>` +
+    `<div class="ticks"><span>${ticks[0]}</span><span>${fmt1(max / 2)}</span><span>${fmt1(max)} год/добу</span></div></div>` +
+    `<span><span class="swatch-hatch"></span> немає даних або постійна тривога не записана</span>`;
+  const rows = datasetIsos.filter((i) => !PERMANENT[i]).map((i) => [regionsByIso[i].name, summary(i)]).sort((a, b) => (b[1].perDay ?? -1) - (a[1].perDay ?? -1));
+  $('map-table').innerHTML = `<table><thead><tr><th>Регіон</th><th class="num">год/добу</th><th class="num">годин</th><th class="num">днів даних</th></tr></thead><tbody>` +
+    rows.map(([n, s]) => `<tr><td>${n}</td><td class="num">${fmt1(s.perDay)}</td><td class="num">${nf0.format(s.hours)}</td><td class="num">${nf0.format(s.days)}</td></tr>`).join('') + '</tbody></table>';
+}
+
+function renderSelection() {
+  const name = state.region === 'UA' ? 'Уся Україна' : regionsByIso[state.region].name;
+  $('sel-title').textContent = name;
+  $('sel-sub').textContent = `${METRICS[state.metric].label} · ${state.period === 'all' ? 'увесь період' : state.period + ' рік'}`;
+  const s = summary(state.region);
+  const unit = state.region === 'UA' ? ' (середнє на регіон)' : '';
+  $('kpis').innerHTML = [
+    [fmt1(s.perDay), 'год під тривогою на добу' + unit],
+    [nf0.format(s.hours / (state.region === 'UA' ? datasetIsos.length - Object.keys(PERMANENT).length : 1)), 'годин усього' + unit],
+    [s.episodes == null ? '—' : nf0.format(s.episodes / (state.region === 'UA' ? datasetIsos.length - Object.keys(PERMANENT).length : 1)), 'епізодів' + unit],
+    [nf0.format(state.region === 'UA' ? s.days / (datasetIsos.length - Object.keys(PERMANENT).length) : s.days), 'днів, які покривають дані'],
+  ].map(([v, l]) => `<div class="kpi"><b>${v}</b><span>${l}</span></div>`).join('');
+  barChart($('bars'), s.rows);
+}
+
+/* ---------- charts ---------- */
+function frame(container, height) {
+  const width = Math.max(320, container.clientWidth || 520);
+  const m = { l: 34, r: 12, t: 10, b: 24 };
+  const svg = el('svg', { viewBox: `0 0 ${width} ${height}`, height });
+  return { svg, width, height, m, iw: width - m.l - m.r, ih: height - m.t - m.b };
+}
+function yAxis(f, max) {
+  const ticks = 4, fmtTick = Number.isInteger(max / ticks) ? nf0 : nf1;
+  for (let i = 0; i <= ticks; i++) {
+    const v = (max / ticks) * i, y = f.m.t + f.ih - (v / max) * f.ih;
+    el('line', { x1: f.m.l, x2: f.width - f.m.r, y1: y, y2: y, class: 'grid-line' }, f.svg);
+    el('text', { x: f.m.l - 6, y: y + 4, 'text-anchor': 'end' }, f.svg).textContent = fmtTick.format(v);
+  }
+}
+function xLabels(f, months, x) {
+  // Labels at least ~64 px apart. The last month always gets a label, so the others keep clear of it.
+  const minGap = 64, last = months.length - 1;
+  const label = (i) => {
+    const [y, m] = months[i].split('-');
+    el('text', { x: x(i), y: f.height - 6, 'text-anchor': 'middle' }, f.svg).textContent =
+      months.length > 14 ? `${MONTHS[+m - 1]} ${y.slice(2)}` : MONTHS[+m - 1];
+  };
+  let prev = -Infinity;
+  for (let i = 0; i < last; i++) {
+    if (x(i) - prev >= minGap && x(last) - x(i) >= minGap) { label(i); prev = x(i); }
+  }
+  if (last >= 0) label(last);
+}
+
+function barChart(container, rows) {
+  const m = METRICS[state.metric];
+  // A month is partial when the source covers fewer days than the month has (both summed over the same regions).
+  const data = rows.filter((r) => r[m.days] > 0).map((r) => ({ month: r[0], v: r[m.col] / r[m.days], partial: r[m.days] < r[8], hours: r[m.col], days: r[m.days] }));
+  const f = frame(container, 210);
+  if (!data.length) { container.textContent = 'Немає даних за цей період.'; return; }
+  const max = niceMax(Math.max(...data.map((d) => d.v)));
+  yAxis(f, max);
+  const bw = f.iw / data.length;
+  const x = (i) => f.m.l + bw * i + bw / 2;
+  data.forEach((d, i) => {
+    const h = (d.v / max) * f.ih, w = Math.max(1, bw - 2);
+    const y = f.m.t + f.ih - h, r = Math.min(4, w / 2, h);
+    // Rounded data-end (top), square at the baseline.
+    el('path', { d: `M${x(i) - w / 2},${f.m.t + f.ih}V${y + r}Q${x(i) - w / 2},${y} ${x(i) - w / 2 + r},${y}H${x(i) + w / 2 - r}Q${x(i) + w / 2},${y} ${x(i) + w / 2},${y + r}V${f.m.t + f.ih}Z`,
+      fill: d.partial ? 'var(--seq-1)' : 'var(--seq-3)' }, f.svg);
+    const hit = el('rect', { x: f.m.l + bw * i, y: f.m.t, width: bw, height: f.ih, class: 'hit' }, f.svg);
+    const [yy, mm] = d.month.split('-');
+    hit.addEventListener('mousemove', (e) => showTip(e, `<b>${MONTHS[+mm - 1]} ${yy}</b>${fmt1(d.v)} год/добу${d.partial ? '<br>місяць покрито частково' : ''}`));
+    hit.addEventListener('mouseleave', hideTip);
+  });
+  el('line', { x1: f.m.l, x2: f.width - f.m.r, y1: f.m.t + f.ih, y2: f.m.t + f.ih, class: 'axis' }, f.svg);
+  xLabels(f, data.map((d) => d.month), x);
+  container.replaceChildren(f.svg);
+}
+
+function renderCompare() {
+  const rows = rowsFor(state.region);
+  const months = rows.map((r) => r[0]);
+  const s1 = rows.map((r) => (r[6] ? r[2] / r[6] : null)); // official oblast-wide
+  const s2 = rows.map((r) => (r[7] ? r[3] / r[7] : null)); // volunteer
+  $('cmp-legend').innerHTML = `<span><i style="background:var(--series-1)"></i>Офіційні, уся область</span><span><i style="background:var(--series-2)"></i>Волонтерські</span>`;
+  const container = $('compare');
+  const f = frame(container, 230);
+  f.m.r = 12;
+  const max = niceMax(Math.max(0.1, ...s1.filter((v) => v != null), ...s2.filter((v) => v != null)));
+  yAxis(f, max);
+  const x = (i) => f.m.l + (months.length < 2 ? f.iw / 2 : (f.iw * i) / (months.length - 1));
+  const y = (v) => f.m.t + f.ih - (v / max) * f.ih;
+  const path = (vals) => vals.map((v, i) => (v == null ? null : [x(i), y(v)])).reduce((acc, p) => {
+    if (!p) { acc.pen = 'M'; return acc; }
+    acc.d += `${acc.pen}${p[0].toFixed(1)},${p[1].toFixed(1)}`; acc.pen = 'L'; return acc;
+  }, { d: '', pen: 'M' }).d;
+  // The December 2025 rule change explains the oblast-wide drop: mark it.
+  const switchIdx = months.indexOf('2025-12');
+  if (switchIdx !== -1) {
+    el('line', { x1: x(switchIdx), x2: x(switchIdx), y1: f.m.t, y2: f.m.t + f.ih, class: 'marker-line' }, f.svg);
+    el('text', { x: x(switchIdx) - 4, y: f.m.t + 10, 'text-anchor': 'end', class: 'marker-text' }, f.svg).textContent = 'тривоги стають районними →';
+  }
+  el('path', { d: path(s1), class: 'series s1' }, f.svg);
+  el('path', { d: path(s2), class: 'series s2' }, f.svg);
+  el('line', { x1: f.m.l, x2: f.width - f.m.r, y1: f.m.t + f.ih, y2: f.m.t + f.ih, class: 'axis' }, f.svg);
+  xLabels(f, months, x);
+  const cross = el('line', { y1: f.m.t, y2: f.m.t + f.ih, class: 'crosshair', visibility: 'hidden' }, f.svg);
+  const d1 = el('circle', { r: 4, class: 'dot', fill: 'var(--series-1)', visibility: 'hidden' }, f.svg);
+  const d2 = el('circle', { r: 4, class: 'dot', fill: 'var(--series-2)', visibility: 'hidden' }, f.svg);
+  const hit = el('rect', { x: f.m.l, y: f.m.t, width: f.iw, height: f.ih, class: 'hit' }, f.svg);
+  hit.addEventListener('mousemove', (e) => {
+    const box = f.svg.getBoundingClientRect();
+    const px = ((e.clientX - box.left) / box.width) * f.width;
+    const i = Math.max(0, Math.min(months.length - 1, Math.round(((px - f.m.l) / f.iw) * (months.length - 1))));
+    for (const [dot, v] of [[d1, s1[i]], [d2, s2[i]]]) {
+      if (v == null) dot.setAttribute('visibility', 'hidden');
+      else { dot.setAttribute('cx', x(i)); dot.setAttribute('cy', y(v)); dot.setAttribute('visibility', 'visible'); }
+    }
+    cross.setAttribute('x1', x(i)); cross.setAttribute('x2', x(i)); cross.setAttribute('visibility', 'visible');
+    const [yy, mm] = months[i].split('-');
+    showTip(e, `<b>${MONTHS[+mm - 1]} ${yy}</b>Офіційні, уся область: ${fmt1(s1[i])}<br>Волонтерські: ${fmt1(s2[i])} год/добу`);
+  });
+  hit.addEventListener('mouseleave', () => { hideTip(); for (const n of [cross, d1, d2]) n.setAttribute('visibility', 'hidden'); });
+  container.replaceChildren(f.svg);
+}
+
+function renderHeat() {
+  const key = METRICS[state.metric].heatKey || 'official_any';
+  const src = D.heatmap[key] || {};
+  const grid = Array.from({ length: 7 }, () => Array(24).fill(0));
+  const isos = state.region === 'UA' ? Object.keys(src) : [state.region];
+  for (const iso of isos) (src[iso] || []).forEach((row, d) => row.forEach((n, h) => (grid[d][h] += n)));
+  const max = Math.max(1, ...grid.flat());
+  $('heat-sub').textContent = `Кількість епізодів за годиною початку (київський час) і днем тижня · ${key === 'volunteer' ? 'волонтерські дані' : 'офіційні, будь-який рівень'} · увесь період.`;
+  let html = '<div class="heat" role="img" aria-label="Теплова карта початку тривог за годиною та днем тижня"><span></span>';
+  for (let h = 0; h < 24; h++) html += `<span class="collab">${h % 3 === 0 ? h : ''}</span>`;
+  grid.forEach((row, d) => {
+    html += `<span class="rowlab">${DAYS[d]}</span>`;
+    row.forEach((n, h) => {
+      const level = Math.min(RAMP.length - 1, Math.floor((n / max) * RAMP.length));
+      html += `<span class="cell" data-d="${d}" data-h="${h}" data-n="${n}" style="background:var(${RAMP[level]})"></span>`;
+    });
+  });
+  $('heat').innerHTML = html + '</div>';
+  $('heat').querySelectorAll('.cell').forEach((c) => {
+    c.addEventListener('mousemove', (e) => showTip(e, `<b>${DAYS[c.dataset.d]}, ${c.dataset.h}:00–${c.dataset.h}:59</b>${nf0.format(c.dataset.n)} епізодів`));
+    c.addEventListener('mouseleave', hideTip);
+  });
+}
+
+function renderLongest() {
+  const m = METRICS[state.metric];
+  const rows = D.longest.filter((r) => r.metric === m.longKey && (state.region === 'UA' || r.iso === state.region));
+  $('long-sub').textContent = `${m.label} · топ-10 за весь період` + (state.region === 'UA' ? '' : ' (серед загальноукраїнського топу)') + '. Київський час.';
+  $('longest').innerHTML = rows.length
+    ? `<table><thead><tr><th>#</th><th>Регіон</th><th>Початок</th><th>Кінець</th><th class="num">годин</th></tr></thead><tbody>` +
+      rows.map((r) => `<tr><td>${r.rank}</td><td>${r.name}</td><td>${r.start}</td><td>${r.end}</td><td class="num">${nf0.format(r.hours)}</td></tr>`).join('') + '</tbody></table>'
+    : '<p class="sub">Ця область не входить у загальноукраїнський топ-10 найдовших епізодів.</p>';
+}
+
+/* ---------- tooltip ---------- */
+const tip = $('tip');
+function showTip(e, html) {
+  tip.innerHTML = html; tip.classList.add('on');
+  const pad = 14, w = tip.offsetWidth, h = tip.offsetHeight;
+  let x = e.clientX + pad, y = e.clientY + pad;
+  if (x + w > innerWidth - 8) x = e.clientX - w - pad;
+  if (y + h > innerHeight - 8) y = e.clientY - h - pad;
+  tip.style.left = x + 'px'; tip.style.top = y + 'px';
+}
+function hideTip() { tip.classList.remove('on'); }
+let resizeTimer;
+addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => D && render(), 150); });
+</script>
+</body>
+</html>
