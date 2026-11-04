@@ -1,0 +1,30 @@
+[package]
+name = "gitsight"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+description = "Find hotspots, code owners and the bus factor of any git repository"
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/sanchiz342/prg1"
+homepage = "https://github.com/sanchiz342/prg1/tree/main/git-insights"
+keywords = ["git", "cli", "bus-factor", "hotspots", "code-analysis"]
+categories = ["command-line-utilities", "development-tools"]
+exclude = ["/docs/*.png", "/target"]
+
+[dependencies]
+anyhow = "1.0.104"
+clap = { version = "4.6.7", features = ["derive"] }
+globset = "0.4.21"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+unicode-width = "0.2.3"
+
+[dev-dependencies]
+serde_json = "1.0.154"
+tempfile = "3.27.0"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

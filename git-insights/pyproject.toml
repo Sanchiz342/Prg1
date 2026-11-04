@@ -1,0 +1,29 @@
+# Publishes the Rust binary to PyPI so Python users can `pip install gitsight` (or `pipx install gitsight`).
+# maturin builds platform wheels that contain only the compiled executable: no Python code, no runtime deps.
+[build-system]
+requires = ["maturin>=1.5,<2"]
+build-backend = "maturin"
+
+[project]
+name = "gitsight"
+description = "Find hotspots, code owners and the bus factor of any git repository"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.8"
+keywords = ["git", "cli", "bus-factor", "hotspots", "code-analysis"]
+classifiers = [
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Rust",
+    "Topic :: Software Development :: Quality Assurance",
+    "Topic :: Software Development :: Version Control :: Git",
+]
+dynamic = ["version"]
+
+[project.urls]
+Repository = "https://github.com/sanchiz342/prg1/tree/main/git-insights"
+
+[tool.maturin]
+bindings = "bin"
+strip = true
