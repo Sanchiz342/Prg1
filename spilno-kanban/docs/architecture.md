@@ -53,10 +53,10 @@ updates (id, board_id, data BLOB, created_at)      -- append-only log
 ## Limits (env vars)
 | variable | default | |
 |---|---|---|
-| `MAX_MESSAGE_BYTES` | 1 MiB | larger frames close the socket (1009) |
+| `MAX_MESSAGE_BYTES` | 10 MiB | larger frames close the socket (1009). Must be ≥ `MAX_DOC_BYTES`: a client that edited offline sends its whole state in one message on reconnect (the server warns at start-up otherwise) |
 | `MESSAGE_RATE` / `MESSAGE_BURST` | 60/s, 300 | token bucket per connection (1008 when exceeded) |
 | `MAX_CONNECTIONS_PER_ROOM` | 50 | further upgrades get HTTP 503 |
-| `MAX_DOC_BYTES` | 10 MiB | above this the board becomes read-only (edits are dropped) |
+| `MAX_DOC_BYTES` | 8 MiB | above this the board becomes read-only (edits are dropped) |
 | `ROOM_IDLE_MS` | 30 s | unload and compact a room after its last client leaves |
 | `HEARTBEAT_MS` | 30 s | ping; sockets that do not answer are terminated |
 | `ALLOWED_ORIGINS` | (any) | comma-separated `Origin` allow-list for upgrades |

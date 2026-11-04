@@ -79,8 +79,8 @@ More detail: [docs/architecture.md](docs/architecture.md).
 
 ## Tests
 ```bash
-npm test             # 12 server integration tests + 24 web unit/property tests
-npm run test:e2e     # 7 Playwright tests in real Chromium (builds first)
+npm test             # 14 server integration tests + 25 web unit/property tests
+npm run test:e2e     # 8 Playwright tests in real Chromium (builds first)
 npm run typecheck
 ```
 - **Convergence (property-based, fast-check):**
@@ -119,7 +119,7 @@ npm run typecheck
   - simultaneous typing in one description;
   - bad links.
 
-  The suite passed 21 out of 21 runs (`--repeat-each=3`).
+  The suite passed 24 out of 24 runs (`--repeat-each=3`).
 
 The tests caught real bugs during development. These were fixed and stay covered by tests:
 - **Lost and scrambled text.** A colleague's text could be erased, or your own letters scrambled, when someone
@@ -131,6 +131,16 @@ The tests caught real bugs during development. These were fixed and stay covered
   custom coordinate getter now moves cards between columns.
 - **Status stuck on "connecting…"** after the network returned while the socket had survived.
 - **Order keys grew quadratically when appending:** 248 characters after 1,000 appends, now 31.
+
+The final review found and fixed four more problems, each now covered by a test:
+- **Server crash from one request.** A single request with malformed percent-encoding (`/%E0%A4%A`) crashed the
+  server; it now gets a 400.
+- **Untrusted presence colours.** A colour set in someone's presence data was passed straight into a CSS custom
+  property, where a value like `url(…)` would make every other participant's browser fetch a third-party URL.
+  Only `#rrggbb` is accepted now.
+- **Lost title edits.** An edited card title was lost when the card was closed with Escape.
+- **Contradictory size limits.** The message limit (1 MiB) was smaller than the board limit (10 MiB), so a large
+  board edited offline could never sync.
 
 ## Measurements
 Everything ran in one process on a 4-vCPU cloud VM (Intel Xeon 2.8 GHz, Node 22.23): the server and real

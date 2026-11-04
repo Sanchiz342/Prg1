@@ -124,7 +124,15 @@ function Field(props: { value: string; label: string; placeholder?: string; clas
   useEffect(() => {
     if (document.activeElement !== input.current) setV(props.value);
   }, [props.value]);
-  const commit = () => v !== props.value && props.onCommit(v);
+  const commit = () => {
+    if (v !== props.value) props.onCommit(v);
+  };
+  // Closing the drawer with Escape unmounts the input without a blur event: commit the pending edit then too.
+  const commitRef = useRef(commit);
+  commitRef.current = commit;
+  useEffect(() => () => {
+    commitRef.current();
+  }, []);
   return (
     <label className={`field ${props.className ?? ''}`}>
       <span>{props.label}</span>

@@ -187,6 +187,33 @@ describe('sync server', () => {
     expect(srv.rooms.get(BOARD)!.doc.getText('t').length).toBe(3000);
   });
 
+  it('survives malformed request URLs (one bad request must not crash every board)', async () => {
+    await srv.close();
+    const { mkdtempSync, writeFileSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const staticDir = mkdtempSync(join(tmpdir(), 'spilno-static-'));
+    writeFileSync(join(staticDir, 'index.html'), '<!doctype html><title>t</title>');
+    srv = await server(db.path, { staticDir });
+    const bad = await fetch(`${srv.url}/%E0%A4%A`);
+    expect(bad.status).toBe(400);
+    const traversal = await fetch(`${srv.url}/..%2F..%2Fetc%2Fpasswd`);
+    expect(traversal.status).not.toBe(500);
+    expect(await traversal.text()).not.toContain('root:');
+    expect((await fetch(`${srv.url}/healthz`)).status).toBe(200);
+    expect((await fetch(`${srv.url}/b/someboardid12`)).status).toBe(200); // SPA fallback still works
+  });
+
+  it('a large board edited offline syncs in one message with the default limits', async () => {
+    // The whole offline state (2 MB here) arrives in a single sync message when the client reconnects.
+    const offline = new Y.Doc();
+    offline.getText('t').insert(0, 'x'.repeat(2 * 1024 * 1024));
+    const c = open();
+    Y.applyUpdate(c.doc, Y.encodeStateAsUpdate(offline)); // edits made before the socket connected
+    await synced(c);
+    await eventually(() => expect(srv.rooms.get(BOARD)?.doc.getText('t').length).toBe(2 * 1024 * 1024), 10_000);
+  });
+
   it('serves health and metrics', async () => {
     const a = open();
     await synced(a);

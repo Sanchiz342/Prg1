@@ -32,8 +32,10 @@ export const defaults: ServerOptions = {
   port: 8787,
   host: '0.0.0.0',
   dbPath: 'data/spilno.sqlite',
-  maxMessageBytes: 1 << 20,
-  maxDocBytes: 10 << 20,
+  // A client that edited offline sends its whole state in ONE message on reconnect, so a message must be
+  // allowed to be at least as large as a document.
+  maxMessageBytes: 10 << 20,
+  maxDocBytes: 8 << 20,
   maxConnectionsPerRoom: 50,
   messageRate: 60,
   messageBurst: 300,
@@ -69,6 +71,11 @@ const MIME: Record<string, string> = {
 
 export async function startServer(partial: Partial<ServerOptions> = {}): Promise<RunningServer> {
   const opts: ServerOptions = { ...defaults, ...partial };
+  if (opts.maxMessageBytes < opts.maxDocBytes) {
+    console.warn(
+      `MAX_MESSAGE_BYTES (${opts.maxMessageBytes}) < MAX_DOC_BYTES (${opts.maxDocBytes}): large boards edited offline will not be able to sync`,
+    );
+  }
   const persistence = new Persistence(opts.dbPath);
   const rooms = new Map<string, Room>();
   const idleTimers = new Map<string, NodeJS.Timeout>();
@@ -98,11 +105,25 @@ export async function startServer(partial: Partial<ServerOptions> = {}): Promise
     );
   };
 
-  const http = createHttpServer((req, res) => handleHttp(req, res, opts, rooms, persistence));
+  const http = createHttpServer((req, res) => {
+    // A single malformed request must never take the process (and every open board) down.
+    try {
+      handleHttp(req, res, opts, rooms, persistence);
+    } catch (err) {
+      if (!res.headersSent) res.writeHead(400);
+      res.end();
+    }
+  });
   const wss = new WebSocketServer({ noServer: true, maxPayload: opts.maxMessageBytes });
 
   http.on('upgrade', (req, socket, head) => {
-    const url = new URL(req.url ?? '/', 'http://localhost');
+    let url: URL;
+    try {
+      url = new URL(req.url ?? '/', 'http://localhost');
+    } catch {
+      socket.end('HTTP/1.1 400 Bad Request\r\nConnection: close\r\nContent-Length: 0\r\n\r\n');
+      return;
+    }
     const match = /^\/ws\/([^/]+)$/.exec(url.pathname);
     const reject = (code: number, reason: string) => {
       metrics.rejectedConnections++;
@@ -227,7 +248,14 @@ function handleHttp(
   }
   // Static files with SPA fallback: unknown paths (e.g. /b/<id>) get index.html.
   const root = resolve(opts.staticDir);
-  let file = normalize(join(root, decodeURIComponent(url.pathname)));
+  let pathname: string;
+  try {
+    pathname = decodeURIComponent(url.pathname);
+  } catch {
+    res.writeHead(400).end(); // malformed percent-encoding, e.g. "/%E0%A4%A"
+    return;
+  }
+  let file = normalize(join(root, pathname));
   if (!file.startsWith(root + sep) && file !== root) {
     res.writeHead(400).end();
     return;

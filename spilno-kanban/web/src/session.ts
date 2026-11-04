@@ -6,7 +6,7 @@ import { WebsocketProvider } from 'y-websocket';
 import { IndexeddbPersistence } from 'y-indexeddb';
 
 import { Board, createUndoManager, type BoardView } from './board/model';
-import { getIdentity, type Identity } from './identity';
+import { getIdentity, isInkColor, type Identity } from './identity';
 import { rememberBoard } from './recent';
 
 export type Connection = 'connecting' | 'online' | 'offline';
@@ -103,7 +103,7 @@ export class BoardSession {
       peers.push({
         clientId,
         name: p.user.name.slice(0, 40),
-        color: typeof p.user.color === 'string' ? p.user.color : '#888',
+        color: isInkColor(p.user.color) ? p.user.color : '#7d88a1',
         editing: typeof p.editing === 'string' ? p.editing : null,
         dragging: typeof p.dragging === 'string' ? p.dragging : null,
       });

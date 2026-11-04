@@ -201,6 +201,16 @@ test('two people typing in the same description at once both keep their text', a
   for (const p of [olya, taras]) await expect(p.locator('.description')).toHaveValue('Почсередина!!!');
 });
 
+test('an edited title is kept when the card is closed with Escape', async ({ browser }) => {
+  const olya = await person(browser, 'Оля', '#2F5BEA');
+  await newBoard(olya);
+  await addCard(olya, 'Зробити', 'Стара назва');
+  await olya.getByText('Стара назва').click();
+  await olya.getByLabel('Назва', { exact: true }).fill('Нова назва');
+  await olya.keyboard.press('Escape'); // closes the drawer while the field still has focus (no blur event)
+  await expect(cardTitles(olya, 'Зробити')).toHaveText(['Нова назва']);
+});
+
 test('unknown pages and bad board links are handled', async ({ page }) => {
   await page.goto('/b/x');
   await expect(page.getByRole('heading', { name: 'Такої сторінки немає' })).toBeVisible();
