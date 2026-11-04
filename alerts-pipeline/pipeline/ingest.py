@@ -144,9 +144,9 @@ def fetch(source: Source, *, raw_dir: Path = RAW_DIR, manifest: Path = MANIFEST,
         raise
 
     etag = response.headers.get("ETag")
-    _meta_path(source, raw_dir).write_text(
-        json.dumps({"sha256": sha, "etag": etag, "rows": rows, "fetched_at": _now()}), encoding="utf-8"
-    )
+    meta_tmp = _meta_path(source, raw_dir).with_suffix(".tmp")
+    meta_tmp.write_text(json.dumps({"sha256": sha, "etag": etag, "rows": rows, "fetched_at": _now()}), encoding="utf-8")
+    os.replace(meta_tmp, _meta_path(source, raw_dir))
     result = IngestResult(source.name, status, str(target), sha, size, rows, etag, _now(), source.url)
     _log(result, manifest)
     return result

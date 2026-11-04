@@ -105,3 +105,11 @@ def test_incremental_rerun_equals_full_refresh(wh, tmp_path):
     assert snapshot() == first
     assert run_dbt(["build", "--select", "fct_alerts", "--full-refresh"], warehouse=wh, work_dir=work).success
     assert snapshot() == first
+
+
+def test_freshness_survives_unparseable_values_and_reports_every_source(wh, tmp_path):
+    # The official fixture contains "not a date": freshness must still run for that source (it once crashed and
+    # silently disappeared from the report). The fixture data is from 2024, so both sources are stale.
+    outcome = run_dbt(["source", "freshness"], warehouse=wh, work_dir=tmp_path / "dbt")
+    statuses = {r["name"].split(".")[-1]: r["status"] for r in outcome.sources}
+    assert statuses == {"official_alerts": "error", "volunteer_alerts": "error"}

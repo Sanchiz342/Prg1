@@ -201,6 +201,7 @@ footer a, .method a { color: inherit; }
 <script>
 "use strict";
 const $ = (id) => document.getElementById(id);
+const esc = (v) => String(v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const nf1 = new Intl.NumberFormat('uk-UA', { maximumFractionDigits: 1, minimumFractionDigits: 1 });
 const nf0 = new Intl.NumberFormat('uk-UA', { maximumFractionDigits: 0 });
 const fmt1 = (v) => (v == null || !isFinite(v) ? '—' : nf1.format(v));
@@ -271,7 +272,7 @@ function setupControls() {
   $('period').addEventListener('change', (e) => { state.period = e.target.value; render(); });
   const opts = D.regions.filter((r) => r.inDataset).sort((a, b) => a.name.localeCompare(b.name, 'uk'));
   $('region').innerHTML = '<option value="UA">Уся Україна (середнє по регіонах)</option>' +
-    opts.map((r) => `<option value="${r.iso}">${r.name}</option>`).join('');
+    opts.map((r) => `<option value="${esc(r.iso)}">${esc(r.name)}</option>`).join('');
   $('region').addEventListener('change', (e) => { state.region = e.target.value; render(); });
   $('toggle-table').addEventListener('click', (e) => {
     const t = $('map-table'); t.hidden = !t.hidden; e.target.setAttribute('aria-expanded', String(!t.hidden));
@@ -288,9 +289,10 @@ function renderStatic() {
   $('chips').innerHTML = fresh.map((f) => {
     const name = f.source.startsWith('official') ? 'Офіційні' : 'Волонтерські';
     const ok = f.status === 'pass';
+    const age = f.age_days == null ? 'перевірка не вдалася' : `${nf1.format(f.age_days)} дн. тому`;
     const last = f.source.startsWith('official') ? c.official?.last_day : c.volunteer?.last_day;
     return `<span class="chip ${ok ? 'ok' : 'stale'}"><span class="ic" aria-hidden="true">${ok ? '✓' : '!'}</span>` +
-      `${name}: ${ok ? 'свіжі' : 'застарілі'}, останній запис ${last} (${nf1.format(f.age_days)} дн. тому)</span>`;
+      `${name}: ${ok ? 'свіжі' : f.age_days == null ? 'свіжість невідома' : 'застарілі'}, останній запис ${last} (${age})</span>`;
   }).join('') + (D.meta.dbt ? `<span class="chip"><span class="ic" aria-hidden="true">✓</span>dbt: ${D.meta.dbt.passed} перевірок пройдено, ${D.meta.dbt.warned} попередж.</span>` : '');
 
   $('method').innerHTML = `
@@ -340,9 +342,9 @@ function renderMap() {
     if (r.inDataset) { p.setAttribute('tabindex', '0'); p.setAttribute('role', 'button'); }
     p.setAttribute('aria-label', `${r.name}: ${hatch ? 'немає даних' : fmt1(v) + ' год на добу'}`);
     const tipHtml = () => {
-      if (hatch) return `<b>${r.name}</b>${PERMANENT[r.iso] || (r.note.startsWith('permanent') ? 'Постійна тривога; у датасеті відсутня.' : 'Немає в датасеті.')}`;
+      if (hatch) return `<b>${esc(r.name)}</b>${PERMANENT[r.iso] || (r.note.startsWith('permanent') ? 'Постійна тривога; у датасеті відсутня.' : 'Немає в датасеті.')}`;
       const s = summary(r.iso);
-      return `<b>${r.name}</b>${fmt1(s.perDay)} год/добу · ${nf0.format(s.hours)} год за ${nf0.format(s.days)} дн.` +
+      return `<b>${esc(r.name)}</b>${fmt1(s.perDay)} год/добу · ${nf0.format(s.hours)} год за ${nf0.format(s.days)} дн.` +
         (s.episodes != null ? `<br>${nf0.format(s.episodes)} епізодів` : '');
     };
     p.addEventListener('mousemove', (e) => showTip(e, tipHtml()));
@@ -359,7 +361,7 @@ function renderMap() {
     `<span><span class="swatch-hatch"></span> немає даних або постійна тривога не записана</span>`;
   const rows = datasetIsos.filter((i) => !PERMANENT[i]).map((i) => [regionsByIso[i].name, summary(i)]).sort((a, b) => (b[1].perDay ?? -1) - (a[1].perDay ?? -1));
   $('map-table').innerHTML = `<table><thead><tr><th>Регіон</th><th class="num">год/добу</th><th class="num">годин</th><th class="num">днів даних</th></tr></thead><tbody>` +
-    rows.map(([n, s]) => `<tr><td>${n}</td><td class="num">${fmt1(s.perDay)}</td><td class="num">${nf0.format(s.hours)}</td><td class="num">${nf0.format(s.days)}</td></tr>`).join('') + '</tbody></table>';
+    rows.map(([n, s]) => `<tr><td>${esc(n)}</td><td class="num">${fmt1(s.perDay)}</td><td class="num">${nf0.format(s.hours)}</td><td class="num">${nf0.format(s.days)}</td></tr>`).join('') + '</tbody></table>';
 }
 
 function renderSelection() {
@@ -510,7 +512,7 @@ function renderLongest() {
   $('long-sub').textContent = `${m.label} · топ-10 за весь період` + (state.region === 'UA' ? '' : ' (серед загальноукраїнського топу)') + '. Київський час.';
   $('longest').innerHTML = rows.length
     ? `<table><thead><tr><th>#</th><th>Регіон</th><th>Початок</th><th>Кінець</th><th class="num">годин</th></tr></thead><tbody>` +
-      rows.map((r) => `<tr><td>${r.rank}</td><td>${r.name}</td><td>${r.start}</td><td>${r.end}</td><td class="num">${nf0.format(r.hours)}</td></tr>`).join('') + '</tbody></table>'
+      rows.map((r) => `<tr><td>${r.rank}</td><td>${esc(r.name)}</td><td>${esc(r.start)}</td><td>${esc(r.end)}</td><td class="num">${nf0.format(r.hours)}</td></tr>`).join('') + '</tbody></table>'
     : '<p class="sub">Ця область не входить у загальноукраїнський топ-10 найдовших епізодів.</p>';
 }
 

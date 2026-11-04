@@ -71,8 +71,13 @@ def main(argv: list[str] | None = None) -> int:
                 outcome = run_dbt(["source", "freshness"])
                 fresh = [{"source": s["name"].split(".")[-1], "status": s["status"],
                           "age_days": round((s.get("age_seconds") or 0) / 86400, 1)} for s in outcome.sources]
+                # A source whose freshness query crashed is absent from sources.json: report it, never drop it.
+                for name in (f"{src.name}_alerts" for src in SOURCES):
+                    if name not in {f["source"] for f in fresh}:
+                        fresh.append({"source": name, "status": "runtime error", "age_days": None})
                 for f in fresh:
-                    log(f"freshness {f['source']}: {f['status']} (newest alert {f['age_days']} days old)")
+                    age = "unknown" if f["age_days"] is None else f"{f['age_days']} days old"
+                    log(f"freshness {f['source']}: {f['status']} (newest alert {age})")
                 dbt_meta["freshness"] = fresh
                 summary["freshness"] = fresh
                 if args.strict and any(f["status"] in ("error", "runtime error") for f in fresh):
@@ -83,6 +88,10 @@ def main(argv: list[str] | None = None) -> int:
             timings[step] = round(time.perf_counter() - t0, 2)
     except (IngestError, RuntimeError) as e:
         log(f"FAILED: {e}")
+        exit_code = 1
+    except Exception as e:  # noqa: BLE001 - anything unexpected still ends up in the run log with exit code 1
+        log(f"FAILED unexpectedly: {type(e).__name__}: {e}")
+        summary["error"] = f"{type(e).__name__}: {e}"
         exit_code = 1
 
     summary.update(timings_s=timings, exit_code=exit_code)

@@ -16,7 +16,7 @@ Self-contained mini-project: everything lives in this folder. The dashboard UI i
 make setup           # Python 3.13 venv with pinned duckdb 2.0.0, dbt-core 1.12.6, dbt-duckdb 1.11.1
 make run             # ≈ 20 s: download if changed, load, dbt build, freshness, export
 make dashboard       # http://localhost:8000
-make test            # 14 tests, no network
+make test            # 15 tests, no network
 ```
 `python -m pipeline run --offline` reuses the last download. `--full-refresh` rebuilds the incremental model.
 `--strict` exits with code 2 when a source is stale (for alerting from cron or CI).
@@ -101,7 +101,7 @@ Every run of the pipeline reports these findings; the numbers here are from 2026
 
 ## Tests
 ```bash
-make test     # 14 tests in about 20 s
+make test     # 15 tests in about 25 s
 ```
 - **Transformation tests** run dbt on hand-made fixtures whose correct answers are known exactly, and check:
   - an alert on the night clocks jump forward (4 h, all on 31 March Kyiv time);
@@ -121,6 +121,19 @@ A bug caught on the real data and fixed: the gaps-and-islands model used two win
 DuckDB's parallel execution could order those ties differently in the two windows. Episode numbering then
 became non-deterministic: the overlap test passed on one run and failed on the next. The order is now total
 (`alert_id` breaks ties), and the build passed four times in a row afterwards.
+
+The final review found two more problems, reproduced and fixed:
+- **One bad value disabled freshness monitoring.** A single unparseable `started_at` made the freshness query for
+  that source crash, and the source silently disappeared from the freshness report. The check now uses
+  `try_cast`, and the pipeline reports any missing source as a failure instead of omitting it; a fixture test
+  covers this.
+- **Stale results could be misreported.** A dbt run that failed early could have reported the previous run's
+  results. The artifacts are now deleted before each run.
+
+Also hardened in the same review:
+- metadata files are written atomically;
+- unexpected exceptions are logged to the run log with exit code 1;
+- the dashboard escapes text it puts into HTML.
 
 ## Measured (4-vCPU cloud VM, Python 3.13, DuckDB 2.0.0)
 - **Full run:** about 18–20 s.

@@ -44,10 +44,11 @@ def run_dbt(command: list[str], warehouse: Path = WAREHOUSE, work_dir: Path | No
         "--target-path", str(target),
         "--log-path", str(work / "logs"),
     ]
+    artifact = target / ("sources.json" if command[:2] == ["source", "freshness"] else "run_results.json")
+    artifact.unlink(missing_ok=True)  # never report a previous run's results as this run's
     proc = subprocess.run(args, env=env, capture_output=True, text=True)
     outcome = DbtOutcome(success=proc.returncode == 0, log=proc.stdout + proc.stderr)
 
-    artifact = target / ("sources.json" if command[:2] == ["source", "freshness"] else "run_results.json")
     if artifact.exists():
         data = json.loads(artifact.read_text(encoding="utf-8"))
         for r in data.get("results", []):

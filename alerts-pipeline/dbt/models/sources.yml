@@ -8,7 +8,8 @@ sources:
     schema: raw
     config:
       # Freshness = age of the newest alert in the data, not of the load: a re-downloaded stale file is still stale.
-      loaded_at_field: "cast(started_at as timestamptz)"
+      # try_cast: one unparseable value must not crash the freshness check (it would silently vanish).
+      loaded_at_field: "try_cast(started_at as timestamptz)"
       freshness:
         warn_after: { count: 2, period: day }
         error_after: { count: 14, period: day }
